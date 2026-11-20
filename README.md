@@ -1,7 +1,7 @@
 # SkyBar Staff Management V2.0
 
 **Target production launch: 1 January 2027 (Asia/Kuala_Lumpur).**  
-Frontend: **GitHub Pages** · Backend: **Supabase Edge Functions + PostgreSQL**  
+Source: **GitHub** · Public frontend: **Cloudflare Workers Static Assets** · Backend: **Supabase Edge Functions + PostgreSQL**  
 No Google Apps Script or Google Sheets required.
 
 ## Current status
@@ -15,8 +15,8 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Staff ID + PIN custom server-side session | Implemented; needs real Supabase deployment/testing |
 | Leave current-month / max 2 staff per date | Enforced in SQL; needs UAT |
 | Calendar displays staff names and pending/approved | Implemented; needs UAT |
-| AL balance calculation | Implemented; admin allocation UI pending |
-| PH dated credits, historical carry-forward and unlock rules | Implemented in database; admin entry UI pending |
+| AL by-year balance, entitlement, approved carry-forward and adjustment | Migration 004 + admin UI committed; requires SQL/Edge deployment & UAT |
+| PH credit ledger, 2025/2026 historical credits, date-triggered 2027 PH | Migration 004 + admin UI committed; requires SQL/Edge deployment & UAT |
 | Leave approval and cancel | Implemented; needs UAT |
 | OT with 9-hour deduction, midnight crossings | Implemented; needs UAT |
 | OT approval and original HR Excel export | **Not migrated yet** |
@@ -24,6 +24,20 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Automated database backup and audit reporting | **Not configured yet** |
 
 **Security notes:** The frontend contains no service role key, password or real staff records. All database access goes through an Edge Function. The browser only holds a short-lived opaque session token (sessionStorage). Database RLS is enabled, with no policies for public access. Admin and server security need a full penetration review before launch.
+
+## AL & PH Management (next setup step)
+
+1. In **Supabase SQL Editor**, run `supabase/migrations/20261120_004_al_ph_management.sql`. This updates the AL leave calculation and adds role-protected AL/PH administration RPCs. Existing employees, login and leave tables stay in place.
+2. In Supabase **Edge Functions → staff-api**, replace the function's code with the latest `supabase/functions/staff-api/index.ts`, then **Deploy**. Keep Verify JWT **OFF**. This step is required; committing GitHub code does not deploy a Supabase Edge Function.
+3. Allow Cloudflare Git auto-deployment to complete. Hard refresh `https://skybar-staff-management-v2.texas-boiler.workers.dev/`.
+4. Login `ADMIN001`. Go to **AL & PH Management** (admin-only navigation). Choose **2027**. Set a dummy staff member's AL entitlement and carry-forward via **Set AL**.
+5. Create one **2025 historical PH** (Historical / MANUAL) for dummy staff, and one **2027 future PH** (AUTO_DATE with correct future date).
+6. Verify status shows historical **RELEASED**, future **LOCKED**, and totals in the admin ledger. Deactivate and reactivate an unused PH credit.
+7. Confirm a normal staff account cannot open the AL/PH Admin page. Leave submissions remain blocked until go-live **1 January 2027**.
+
+**Important:** The 2027 AL total is `2027 entitlement + carry-forward into 2027 + adjustment`. Do not copy the entire 2026 entitlement into 2027 carry-forward, or balances will be overstated. PH credit consumption is oldest-year-first, after it has been released. Dates are **not prefilled** because hotel-approved public holidays and replacement dates must be verified; the holiday name suggestions do not set dates.
+
+AL/PH admin setup can be done before go-live, but this module is **not production verified** until SQL migration and UAT pass.
 
 ## Employee Management V2 (next setup step)
 
@@ -108,7 +122,7 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 
 ## Upcoming milestones
 
-1. Administrative employee management and PH/AL bulk allocation.
+1. Complete AL/PH UAT; implement controlled bulk allocation if required.
 2. Full OT approvals and downloadable HR Excel claim matching `OT form.xlsx`.
 3. Data validation, user acceptance testing with three simulated staff.
 4. Backups, operational runbook and security review.
