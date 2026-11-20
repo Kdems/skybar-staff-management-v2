@@ -43,6 +43,20 @@ BEGIN
  RETURN jsonb_build_object('ok',true,'filename',p_filename,'bytes',v_size);
 END $$;
 
+CREATE OR REPLACE FUNCTION public.get_ot_form_v2()
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_name text;v_bytes bytea;
+BEGIN
+ SELECT filename,file_bytes INTO v_name,v_bytes
+ FROM public.ot_form_templates WHERE id=1;
+ IF NOT FOUND THEN RAISE EXCEPTION 'OT form template not configured. Ask Admin to upload the approved .xlsx template'; END IF;
+ RETURN jsonb_build_object('filename',v_name,'base64',encode(v_bytes,'base64'));
+END $;
+
+REVOKE EXECUTE ON FUNCTION public.get_ot_form_v2()
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.get_ot_form_v2() TO service_role;
+
 REVOKE EXECUTE ON FUNCTION public.admin_set_ot_form_v2(uuid,text,text)
   FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_set_ot_form_v2(uuid,text,text) TO service_role;
