@@ -32,7 +32,7 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 ### Two administrator workflows
 
 1. **Bulk yearly PH schedule** — Admin selects all active staff (or a subset) and pastes the whole year's holiday schedule. Each line uses `YYYY-MM-DD | Holiday Name | Days`; Excel three-column tab-separated paste also works. One confirmation allocates all scheduled holidays to all selected staff. Each credit unlocks on its actual date. Repeating the same schedule skips matching records instead of doubling credit.
-2. **Historical PH opening balances** — Admin chooses 2025 or 2026, enters one outstanding opening balance per active staff in a single table, and saves once. Existing opening balances are updated, not duplicated. The table shows other PH credits already allocated for the year, so the administrator can avoid counting them a second time. `0` disables an unused opening credit; credits with usage history cannot be zeroed.
+2. **Historical PH opening balances** — Admin chooses 2025 or 2026, explicitly selects staff (or Select All), enters one outstanding opening balance per chosen staff, and saves once. Unticked staff are not modified; Apply to Selected Staff fills only ticked rows. Existing opening balances are updated, not duplicated. The table shows other PH credits already allocated for the year, so the administrator can avoid counting them a second time. `0` disables an unused opening credit; credits with usage history cannot be zeroed.
 
 ### Install order (the GitHub commits do not deploy Supabase automatically)
 
