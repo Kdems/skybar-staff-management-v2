@@ -425,6 +425,61 @@ function cancelOT(id){
   }}
  ]);
 }
+
+function xlsxBlob(headers,rows){
+ const enc=new TextEncoder(),xml=s=>String(s??'').replace(/[&<>"']/g,v=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[v]));
+ const column=n=>{let s='';do{s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)-1}while(n>=0);return s};
+ const data=[headers,...rows];
+ const table=data.map((line,i)=>'<row r="'+(i+1)+'">'+line.map((v,j)=>{
+  const ref=column(j)+(i+1);
+  return typeof v==='number'&&Number.isFinite(v)?
+   '<c r="'+ref+'"><v>'+v+'</v></c>':
+   '<c r="'+ref+'"'+(i===0?' s="1"':'')+' t="inlineStr"><is><t xml:space="preserve">'+xml(v)+'</t></is></c>';
+ }).join('')+'</row>').join('');
+ const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+ const main='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+ const worksheet=head+'<worksheet xmlns="'+main+'"><dimension ref="A1:'+column(headers.length-1)+data.length+'"/>'+
+ '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'+
+ '<cols>'+headers.map((_,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="22" customWidth="1"/>').join('')+'</cols>'+
+ '<sheetData>'+table+'</sheetData><autoFilter ref="A1:'+column(headers.length-1)+data.length+'"/></worksheet>';
+ const styles=head+'<styleSheet xmlns="'+main+'"><fonts count="2"><font><sz val="11"/><name val="Aptos"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Aptos"/></font></fonts>'+
+ '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF10223B"/><bgColor indexed="64"/></patternFill></fill></fills>'+
+ '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'+
+ '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+ '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>'+
+ '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+ const entries=[
+ ['[Content_Types].xml',head+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+ ['_rels/.rels',head+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+ ['xl/workbook.xml',head+'<workbook xmlns="'+main+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="SkyBar Report" sheetId="1" r:id="rId1"/></sheets></workbook>'],
+ ['xl/_rels/workbook.xml.rels',head+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+ ['xl/worksheets/sheet1.xml',worksheet],['xl/styles.xml',styles]
+ ];
+ const crcTable=new Uint32Array(256);for(let i=0;i<256;i++){let v=i;for(let k=0;k<8;k++)v=(v&1)?(0xedb88320^(v>>>1)):(v>>>1);crcTable[i]=v>>>0}
+ const crc32=b=>{let c=0xffffffff;for(const n of b)c=crcTable[(c^n)&255]^(c>>>8);return(c^0xffffffff)>>>0};
+ const u16=(a,v)=>a.push(v&255,(v>>>8)&255),u32=(a,v)=>a.push(v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255);
+ const chunks=[],central=[];let offset=0;
+ for(const [name,value] of entries){
+  const n=enc.encode(name),b=enc.encode(value),crc=crc32(b),local=[],dir=[];
+  u32(local,0x04034b50);u16(local,20);u16(local,0x800);u16(local,0);u16(local,0);u16(local,0);
+  u32(local,crc);u32(local,b.length);u32(local,b.length);u16(local,n.length);u16(local,0);
+  chunks.push(Uint8Array.from(local),n,b);
+  u32(dir,0x02014b50);u16(dir,20);u16(dir,20);u16(dir,0x800);u16(dir,0);u16(dir,0);u16(dir,0);
+  u32(dir,crc);u32(dir,b.length);u32(dir,b.length);u16(dir,n.length);u16(dir,0);u16(dir,0);
+  u16(dir,0);u16(dir,0);u32(dir,0);u32(dir,offset);
+  central.push(Uint8Array.from(dir),n);offset+=local.length+n.length+b.length;
+ }
+ const dirSize=central.reduce((acc,b)=>acc+b.length,0),end=[];
+ u32(end,0x06054b50);u16(end,0);u16(end,0);u16(end,entries.length);u16(end,entries.length);
+ u32(end,dirSize);u32(end,offset);u16(end,0);
+ return new Blob([...chunks,...central,Uint8Array.from(end)],
+  {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function downloadTableXlsx(filename,headers,rows){
+ const blob=xlsxBlob(headers,rows),url=URL.createObjectURL(blob);
+ const el=document.createElement('a');el.href=url;el.download=filename;document.body.append(el);el.click();el.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
 function safeCsvCell(value){
  let s=String(value??'');
  if(/^\s*[=+\-@\t\r]/.test(s))s="'"+s;
