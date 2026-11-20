@@ -334,6 +334,54 @@ function admin(){
     cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
     title('Remaining Migration')+'<div class="card"><p class="muted">Overtime approval, HR export and reports are being completed before full UAT.</p></div>';
 }
+
+function otStatusAction(id,decision){
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin access only',true);
+ const item=(state.overview.adminOt||[]).find(x=>x.id===id);
+ if(!item||item.status!=='PENDING')return toast('Only pending OT may be decided',true);
+ if(!['APPROVED','REJECTED'].includes(decision))return;
+ const form='<p class="muted">'+esc(item.employee_name)+' · '+fmt(item.ot_date)+' · '+num(item.ot_minutes/60)+' OT hours</p>'+
+ '<div class="field"><label for="otNote">Admin note '+(decision==='REJECTED'?'(required)':'(optional)')+'</label><textarea id="otNote" maxlength="500"></textarea></div>';
+ customForm((decision==='APPROVED'?'Approve':'Reject')+' Overtime',form,'Confirm Decision',async()=>{
+  const note=$('otNote').value.trim();
+  if(decision==='REJECTED'&&note.length<3)throw Error('Rejection requires a reason');
+  await adminCommit('decideOT',{requestId:id,status:decision,note},'Overtime '+decision.toLowerCase());
+ });
+}
+function cancelOT(id){
+ modal('Cancel pending overtime?','This will cancel the pending OT record, not delete it.',[
+  {text:'Keep OT'},
+  {text:'Cancel OT',primary:true,action:async()=>{
+   try{await call('cancelOT',{requestId:id});await reload();toast('OT cancelled')}
+   catch(e){toast(e.message,true)}
+  }}
+ ]);
+}
+function safeCsvCell(value){
+ let s=String(value??'');
+ if(/^\s*[=+\-@\t\r]/.test(s))s="'"+s;
+ return '"'+s.replace(/"/g,'""')+'"';
+}
+function downloadTableCsv(filename,headers,rows){
+ const body='\uFEFF'+[headers,...rows].map(r=>r.map(safeCsvCell).join(',')).join('\r\n');
+ const blob=new Blob([body],{type:'text/csv;charset=utf-8'});
+ const url=URL.createObjectURL(blob),el=document.createElement('a');
+ el.href=url;el.download=filename;document.body.appendChild(el);el.click();el.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+function exportOT(){
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
+ const data=state.overview.adminOt||[];
+ if(!data.length)return toast('No OT records to export',true);
+ downloadTableCsv('SkyBar_OT_'+myDate()+'.csv',
+  ['Employee ID','Employee','OT Date','Shift Start','Shift End','Total Shift (hours)','OT Hours','Claim Type','Status','Reason','Admin Note'],
+  data.map(r=>{const p=staffById(r.staff_id);return[
+    p?.employee_id||'',r.employee_name||'',r.ot_date,r.shift_start,r.shift_end,
+    (Number(r.total_shift_minutes)/60).toFixed(2),(Number(r.ot_minutes)/60).toFixed(2),
+    r.claim_type,r.status,r.reason,r.admin_note||''
+  ]}));
+ toast('OT report exported (Excel-compatible CSV)');
+}
 function editLeaveType(requestId){
  if(state.preview)return toast('Preview is read-only',true);
  if(state.user?.role!=='ADMIN')return toast('Admin access only',true);
