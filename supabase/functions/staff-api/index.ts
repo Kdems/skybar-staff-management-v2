@@ -5,8 +5,13 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 const URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const ORIGIN = Deno.env.get("SKYBAR_ALLOWED_ORIGIN") || "https://kdems.github.io";
-const ALLOWED = [ORIGIN, "https://kdems.github.io"].filter(Boolean);
+// Exact browser origins allowed to call the API. No wildcard for a staff management app.
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://kdems.github.io",
+  "https://skybar-staff-management-v2.texas-boiler.workers.dev"
+];
+const extraOrigin = (Deno.env.get("SKYBAR_ALLOWED_ORIGIN") || "").trim().replace(/\\/+$/, "");
+const ALLOWED = [...new Set([...DEFAULT_ALLOWED_ORIGINS, extraOrigin].filter(Boolean))];
 
 class ApiError extends Error {
   constructor(message: string, readonly code=400) { super(message); }
