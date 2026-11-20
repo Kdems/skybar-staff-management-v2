@@ -152,11 +152,7 @@ function openHistoricalBulk(year=2025,preset={}){
       }catch(e){toast(e.message,true)}
     }}]);
  });
- $('openingYear').onchange=()=>{
-  const selected=Number($('openingYear').value);
-  $('modalContent').innerHTML=openingBalanceMarkup(selected);
-  $('openingYear').onchange=()=>openHistoricalBulk(Number($('openingYear').value));
- };
+ $('openingYear').onchange=()=>openHistoricalBulk(Number($('openingYear').value));
 }
 function balances(){
  if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
@@ -185,6 +181,10 @@ function balances(){
   '<div class="grid grid-3">'+metric('AL Allocated ('+year+')',count,people.length+' staff accounts')+metric('Released PH',num(Math.max(0,released)),'Available units, across staff')+metric('Locked Future PH',num(locked),'Awaiting holiday dates')+'</div>'+
   '<div class="section-bar"><div><h2>Annual Leave Allocation</h2><p>Each year is separate. Carry-forward into 2027 belongs in the 2027 row.</p></div><select id="alYearSelector" class="toolbar-select">'+yearOptions+'</select></div>'+
   '<div class="card table-wrap"><table><thead><tr><th>ID</th><th>Employee</th><th>Entitlement</th><th>Carry-forward</th><th>Adjustment</th><th>Total Days</th><th>Action</th></tr></thead><tbody>'+(alRows||'<tr><td colspan="7">No employees.</td></tr>')+'</tbody></table></div>'+
+  '<div class="section-bar"><div><h2>Bulk PH Allocation</h2><p>One schedule to all selected staff, or one grid for historical balances.</p></div></div>'+
+  '<div class="grid grid-2 bulk-quick-actions">'+
+  '<button class="action-card" id="bulkPHBtn"><span class="action-icon">▦</span><span><b>Allocate Annual PH Schedule</b><small>Enter multiple holiday dates → apply to selected staff</small></span></button>'+
+  '<button class="action-card" id="openingPHBtn"><span class="action-icon">☷</span><span><b>Historical PH Balances 2025 / 2026</b><small>One 13-staff table → save everything once</small></span></button></div>'+
   '<div class="section-bar"><div><h2>Public Holiday Credit Ledger</h2><p>2025 historical PH may be entered as earned. Future PH remains locked until its date.</p></div><button class="primary-btn" id="addPHBtn">+ Add PH Credit</button></div>'+
   '<div class="filter-bar"><select id="phYearSelector" class="toolbar-select">'+phYearOptions+'</select><select id="phStaffSelector" class="toolbar-select">'+phStaffOptions+'</select></div>'+
   '<div class="card table-wrap">'+(phRows.length?'<table><thead><tr><th>Staff</th><th>Year</th><th>Holiday</th><th>Holiday Date</th><th>Credit</th><th>Reserved</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+phTable+'</tbody></table>':cardEmpty('No PH credits for these filters.'))+'</div>'+
@@ -399,6 +399,8 @@ function changeOwnPinModal(){
 function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',balances:'AL & PH Management',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,balances,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));$('alYearSelector')?.addEventListener('change',e=>{state.alYear=Number(e.target.value);render()});
 $('phYearSelector')?.addEventListener('change',e=>{state.phYear=e.target.value;render()});
 $('phStaffSelector')?.addEventListener('change',e=>{state.phStaff=e.target.value;render()});
+$('bulkPHBtn')?.addEventListener('click',()=>openBulkPHDraft());
+$('openingPHBtn')?.addEventListener('click',()=>openHistoricalBulk());
 $('addPHBtn')?.addEventListener('click',()=>editPH());
 document.querySelectorAll('[data-edit-al]').forEach(x=>x.onclick=()=>editAL(x.dataset.editAl));
 document.querySelectorAll('[data-edit-ph]').forEach(x=>x.onclick=()=>editPH(x.dataset.editPh));
