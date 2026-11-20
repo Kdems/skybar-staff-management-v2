@@ -92,7 +92,7 @@ async function bootstrap(staff:Staff){
     request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,source_year"),
     request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code,admin_note&order=submitted_at.desc&limit=150"),
     request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
-    request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,ot_minutes,status&order=created_at.desc&limit=150"),
+    request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,instructed_by,status,admin_note,decided_at,created_at&order=created_at.desc&limit=150"),
     request("staff?active=eq.true&role=eq.ADMIN&select=id,employee_id,name,position")
   ]);
   // AL uses the selected calendar year's allocation only, including its explicit carry-forward.
@@ -123,13 +123,14 @@ async function bootstrap(staff:Staff){
   });
   let admin:any={};
   if(staff.role==="ADMIN"){
-    const [employees,pending,alAllocations,phCredits,adminPhUsage,allLeaves]=await Promise.all([
+    const [employees,pending,alAllocations,phCredits,adminPhUsage,allLeaves,allOt]=await Promise.all([
       request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
       request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
       request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
       request("ph_usage?select=credit_id,units,leave_requests!inner(status)"),
-      request("leave_requests?select=id,staff_id,request_code,leave_type,duration,start_date,end_date,units,status,reason,admin_note,submitted_at&order=submitted_at.desc&limit=400")
+      request("leave_requests?select=id,staff_id,request_code,leave_type,duration,start_date,end_date,units,status,reason,admin_note,submitted_at&order=submitted_at.desc&limit=400"),
+      request("overtime_requests?select=id,staff_id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,instructed_by,status,admin_note,decided_at,created_at&order=created_at.desc&limit=500")
     ]);
     const names=new Map(employees.map((e:any)=>[e.id,e.name]));
     const usedByCredit=new Map<string,number>();
@@ -141,6 +142,7 @@ async function bootstrap(staff:Staff){
       employees,
       pending:pending.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
       adminLeaves:allLeaves.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
+      adminOt:allOt.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
       alAllocations,
       phCredits:phCredits.map((p:any)=>({...p,reservedUnits:usedByCredit.get(p.id)||0}))
     };
@@ -191,6 +193,19 @@ serve(async req=>{
     if(input.action==="decideLeave"){
       if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
       return json(await rpc("change_leave_status_v2",{p_actor:staff.id,p_request:input.requestId,p_status:input.status}),200,origin);
+    }
+    if(input.action==="decideOT"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("change_overtime_status_v2",{
+        p_actor:staff.id,p_request:input.requestId,
+        p_status:String(input.status||""),
+        p_admin_note:String(input.note||"")
+      }),200,origin);
+    }
+    if(input.action==="cancelOT"){
+      return json(await rpc("change_overtime_status_v2",{
+        p_actor:staff.id,p_request:input.requestId,p_status:"CANCELLED",p_admin_note:""
+      }),200,origin);
     }
     if(input.action==="submitOT"){
       const p=input.request||{};
