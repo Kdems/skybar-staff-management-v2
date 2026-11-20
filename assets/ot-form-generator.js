@@ -68,6 +68,7 @@ async function unpack(buf){
 }
 async function validateTemplate(buffer){
  const files=await unpack(buffer);
+ if(files.some(f=>/vbaProject\.(bin|xml)$/i.test(f.name)))throw Error('Macro-enabled files are not accepted. Use Excel Save As → .xlsx.');
  const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
  const drawings=files.some(f=>f.name.startsWith('xl/drawings/'));
  const logo=files.some(f=>/^xl\/media\/[^/]+\.(png|jpe?g)$/i.test(f.name));
