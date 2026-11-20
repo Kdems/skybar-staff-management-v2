@@ -93,7 +93,7 @@ async function bootstrap(staff:Staff){
     request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code,admin_note&order=submitted_at.desc&limit=150"),
     request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
     request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,instructed_by,status,admin_note,decided_at,created_at&order=created_at.desc&limit=150"),
-    request("staff?active=eq.true&role=eq.ADMIN&select=id,employee_id,name,position")
+    request("staff?active=eq.true&ot_approver=eq.true&select=id,employee_id,name,position")
   ]);
   // AL uses the selected calendar year's allocation only, including its explicit carry-forward.
   const alGranted=als.reduce((n:number,r:any)=>n+Number(r.entitlement)+Number(r.carry_forward)+Number(r.adjustment),0);
@@ -124,7 +124,7 @@ async function bootstrap(staff:Staff){
   let admin:any={};
   if(staff.role==="ADMIN"){
     const [employees,pending,alAllocations,phCredits,adminPhUsage,allLeaves,allOt]=await Promise.all([
-      request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
+      request("staff?select=id,employee_id,name,position,department,role,active,ot_approver,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
       request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
       request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
@@ -264,12 +264,13 @@ serve(async req=>{
       }),200,origin);
     }
     if(input.action==="getOTPeriod"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
       const date=String(input.date||"");
       if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new ApiError("Invalid OT date");
       const dateObj=new Date(date+"T12:00:00Z");
       if(Number.isNaN(dateObj.getTime())||dateObj.toISOString().slice(0,10)!==date)
         throw new ApiError("Invalid OT calendar date");
-      const staffId=staff.role==="ADMIN"?String(input.staffId||staff.id):staff.id;
+      const staffId=String(input.staffId||"");
       if(!/^[a-f0-9-]{36}$/i.test(staffId))throw new ApiError("Invalid staff account");
       const person=await request("staff?id=eq."+encodeURIComponent(staffId)+
         "&select=id,employee_id,name,position,department,role,active&limit=1");
@@ -280,13 +281,19 @@ serve(async req=>{
       const last=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,15));
       const first=start.toISOString().slice(0,10),final=last.toISOString().slice(0,10);
       const rows=await request("overtime_requests?staff_id=eq."+encodeURIComponent(staffId)+
-        "&ot_date=gte."+first+"&ot_date=lte."+final+
+        "&ot_date=gte."+first+"&ot_date=lte."+final+"&status=eq.APPROVED"+
         "&select=id,staff_id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,status,admin_note,created_at"+
         "&order=ot_date.asc,created_at.asc&limit=251");
       if(rows.length>=251)throw new ApiError("Too many OT records for one period; contact Admin");
+      await request("audit_log","POST",[{
+        actor_staff_id:staff.id,action:"PREPARE_HR_OT_FORM",
+        record_id:staffId,
+        metadata:{periodStart:first,periodEnd:final,approvedRows:rows.length}
+      }]);
       return json({employee:person[0],periodStart:first,periodEnd:final,records:rows},200,origin);
     }
     if(input.action==="getOTTemplate"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
       return json(await rpc("get_ot_form_v2",{}),200,origin);
     }
     if(input.action==="adminUploadOTTemplate"){
@@ -359,6 +366,12 @@ serve(async req=>{
         p_actor:staff.id,p_employee_id:String(p.employeeId||""),
         p_name:String(p.name||""),p_position:String(p.position||""),
         p_department:String(p.department||"SkyBar"),p_pin:String(p.pin||"")
+      }),200,origin);
+    }
+    if(input.action==="adminSetOTApprover"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("admin_set_ot_approver_v2",{
+        p_actor:staff.id,p_target:input.staffId,p_enabled:input.enabled
       }),200,origin);
     }
     if(input.action==="adminUpdateStaff"){
