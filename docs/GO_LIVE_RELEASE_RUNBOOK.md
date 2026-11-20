@@ -82,7 +82,7 @@ Use a **fresh separate Supabase project and separate Cloudflare Worker**, not a 
 6. Cancel/reject a request, verify calendar slot and balances return.
 7. Submit OT including midnight crossing; approve, reject, cancel Pending, verify 9h deduction and notes.
 8. Export leave, OT, employee, AL, PH and audit XLSX reports; open in Excel.
-9. Upload the approved macro-free OT workbook as Admin; download a staff OT form and compare against original layout and printout, including monthly totals and signatures.
+9. Upload the approved macro-free OT workbook as Admin; download a staff OT form and compare against original layout and printout, including original formula cells (if any) and signature areas.
 10. Check login, PIN reset, reactivation, session invalidation and Admin-only routes.
 11. Verify main production lock remains active until 1 January 2027, and the production database has no UAT-only SQL.
 12. Complete disaster-recovery rehearsal and management/IT sign-off.
@@ -95,7 +95,7 @@ Use a **fresh separate Supabase project and separate Cloudflare Worker**, not a 
 - All new OT downloads use one admin-uploaded .xlsx template stored in Supabase privately; only authenticated staff may retrieve it.
 - Macro-free reconstruction is available as a conversation download. For exact visual parity, use Excel Save As to .xlsx from the original workbook (preserving embedded drawings, print settings, fonts), then upload the approved copy via Admin.
 - Admin template updates are audited and do not alter claim records. Staff cannot change the template.
-- The system fills employee identity, period 16th–15th, actual shift, OT from/to, rates x1.5/x2.0/x3.0, Off Day/Compulsory PH and preparation date. Template totals and original approval/signature positions remain.
+- The system fills employee identity, period 16th–15th, actual shift, OT from/to, rates x1.5/x2.0/x3.0, Off Day/Compulsory PH and preparation date. Any formulas present in the uploaded Excel master and all original HR approval/signature positions remain; no new totals are invented.
 - Fields for night shift, split shift and certification are left blank when not captured by the OT system; do not fabricate details.
 - If multiple OT claims exist on one calendar date, the downloader stops rather than silently dropping extra records; use the full OT register for reconciliation.
 - Do not place OT template in public Cloudflare static assets. Run SQL 008 and deploy latest Edge API before uploading template.
@@ -106,3 +106,5 @@ Use a **fresh separate Supabase project and separate Cloudflare Worker**, not a 
 - Original source has `OVERTIME (OT)` in A6. The Admin uploader now validates this, the exact source merge ranges, image/drawing and print settings. Wrong approximation templates are rejected.
 - All former sample shift/OT inputs in the uploaded workbook are cleared when generating a download; all other workbook parts, images, borders, HR instructions and approval sections remain unchanged.
 - Exact equality of PDF/printed appearance is still dependent on the font availability, Excel version, printer drivers and Excel Save As conversion. Confirm using Excel's original Print Preview during combined UAT; do not claim verified 100% visual equivalence before that.
+
+- The Admin uploader now strips historical example shift entries and identifying values automatically before storing the workbook; employee data is added only during authorized download.
