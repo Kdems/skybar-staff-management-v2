@@ -7,8 +7,8 @@ No Google Apps Script or Google Sheets required.
 
 ## Combined final release (pending manual Supabase deployment)
 
-- One atomic SQL script: `supabase/migrations/20261121_006_008_combined_release.sql` (covers migration 006, 007, 008; **do not separately rerun** those scripts).
-- Latest `staff-api` includes Admin OFF leave conversion, OT approval, complete authenticated 16th–15th OT period queries, private HR OT template upload/download and Admin reports.
+- One atomic SQL script: `supabase/migrations/20261121_006_009_final_combined_release.sql` (covers migrations 006, 007, 008 and 009; **do not separately rerun** those scripts).
+- Latest `staff-api` includes Admin OFF leave conversion, OT approval, Admin-managed OT approvers, approved-only HR export for active or resigned staff by 16th–15th cycle, private HR template upload/download, and Admin reports.
 - Static frontend now contains the original-source OT workbook generator; `wrangler.jsonc` and `.assetsignore` keep backend SQL and internal docs out of Cloudflare static assets.
 - Master workbook: `SkyBar_OT_Master_Original_Format.xlsx` delivered in chat. It is a byte-for-byte copy of the existing `OT form.xlsx`, retaining the embedded logo, print setup, worksheet styles and 28 merged ranges. Upload it once in Admin after SQL/API deployment. Exact rendering still requires Microsoft Excel review in final UAT.
 - Current GitHub code is **not proof of database/Edge/Cloudflare deployment**. Live submissions remain locked before 2027-01-01.
@@ -32,7 +32,7 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | OT approval / reject / pending cancel | Migration 007 + Edge/API/UI committed; requires SQL 007 + latest Edge deployment |
 | Source-matched OT form (.xlsx) | Original 2009 template inspected; use original Excel Save As macro-free .xlsx, not approximate reconstruction; Admin upload via migration 008 + Edge API + UI committed |
 | Management reports, native XLSX export, and audit | Code committed; requires latest Edge deployment and UAT |
-| Admin-managed approved OT master template | Migration 008, authenticated template delivery, 16th–15th filled workbook download; final UAT pending |
+| Admin-managed approved OT master template | Migration 008, authenticated template delivery, 16th–15th Admin-selected employee and period, APPROVED OT only, sheet named for employee; final UAT pending |
 | Employee registration, position, ID change, resignation, PIN reset and safe delete | **Code committed; requires migration 003 + redeploy of Edge API + UAT** |
 | Database backups and restore exercise | Supabase plan-dependent; configuration and recovery rehearsal pending |
 
@@ -160,7 +160,7 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 
 ## Upcoming milestones
 
-1. Run migrations **006, 007 and 008** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
+1. Run migrations **006, 007, 008 and 009** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
 2. Confirm the GitHub main frontend has been published to Cloudflare and no backend files are publicly served.
 3. Complete single combined UAT (including OFF Admin correction, OT and XLSX downloads) in isolated staging only.
 4. Obtain original hotel OT Excel form to match its exact HR layout; the operational print form is generic.
