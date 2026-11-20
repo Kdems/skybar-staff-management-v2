@@ -378,15 +378,17 @@ function admin(){
 
 function uploadOTTemplate(){
  if(state.user?.role!=='ADMIN'||state.preview)return toast('Admin only',true);
- const html='<p class="muted">Upload the approved macro-free <b>.xlsx</b> OT form once. All staff downloads will use this template, preserving its headings, logo, merged cells, borders and signature sections. Max file size: 2 MB.</p>'+
+ const html='<p class="muted">Upload the original HR <b>Overtime Form.xls</b> through Microsoft Excel <b>Save As → .xlsx</b> (no macros). The system checks the original layout, 16th–15th period sections, logo and print settings, then uses the same template for every staff. Maximum 2 MB.</p>'+
  '<div class="field"><label for="otMasterFile">Approved OT Excel template (.xlsx)</label><input type="file" id="otMasterFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></div>'+
- '<div class="soft-note">The original 2009 .xls file contains VBA macros. Save a clean .xlsx copy in Excel before uploading. Template replacement is audited and never changes OT claim records.</div>';
+ '<div class="soft-note">Do not upload the previously recreated approximation. Save the ORIGINAL .xls using Microsoft Excel to preserve its native layout. The source workbook contains VBA; only a macro-free .xlsx is allowed. A template replacement is audited.</div>';
  customForm('Admin · Replace HR Overtime Form Template',html,'Upload & Activate Template',async()=>{
    const file=$('otMasterFile').files?.[0];
    if(!file||!file.name.toLowerCase().endsWith('.xlsx'))throw Error('Select an .xlsx file');
    if(file.size<300||file.size>2097152)throw Error('Template must be 300 bytes to 2 MB');
    const bytes=new Uint8Array(await file.arrayBuffer());
    if(bytes[0]!==80||bytes[1]!==75||bytes[2]!==3||bytes[3]!==4)throw Error('Invalid Excel XLSX format');
+   if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT template validator missing');
+   await window.SKYBAR_OT_FORM_GENERATOR.validateTemplate(bytes.buffer);
    let text='';
    for(let i=0;i<bytes.length;i+=12000)text+=String.fromCharCode(...bytes.subarray(i,i+12000));
    const base64=btoa(text);
