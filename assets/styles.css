@@ -12,3 +12,21 @@
 /* AL/PH Management toolbar */
 .filter-bar{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 15px}.toolbar-select{border:1px solid #415774;border-radius:10px;padding:10px 12px;background:#122742;color:#f2f6fc;font-size:.81rem;max-width:100%;min-width:150px}.toolbar-select:focus{outline:2px solid #edc54c;outline-offset:2px}
 @media(max-width:760px){.filter-bar{flex-direction:column}.toolbar-select{max-width:100%}.section-bar{flex-wrap:wrap}}
+
+/* Bulk PH Allocation - wide and scroll-safe admin dialogs */
+.dialog:has(.bulk-dialog){width:min(930px,calc(100vw - 28px));max-height:calc(100dvh - 40px);overflow:auto}
+.bulk-dialog{display:flex;flex-direction:column;gap:12px}
+.bulk-dialog .section-bar{margin:7px 0 0}
+.bulk-dialog .section-bar h3{margin:0 0 4px;font-size:1rem}
+.bulk-staff-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:11px;border:1px solid var(--line);border-radius:12px;max-height:240px;overflow-y:auto}
+.bulk-staff-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:10px;background:#172f4d;cursor:pointer;min-width:0}
+.bulk-staff-item input{width:18px;height:18px;accent-color:var(--gold);flex-shrink:0}
+.bulk-staff-item span{min-width:0}
+.bulk-staff-item b{display:block;overflow-wrap:anywhere;font-size:.84rem}
+.bulk-staff-item small{display:block;color:var(--muted);font-size:.72rem;margin-top:3px}
+.bulk-ledger input{width:100%;min-width:90px;max-width:160px;background:#09172a;border:1px solid #3e5877;border-radius:9px;color:var(--white);padding:10px}
+.bulk-ledger td:first-child{min-width:145px}
+.bulk-dialog textarea{min-height:160px}
+.bulk-quick-actions{margin-bottom:20px}
+.bulk-quick-actions .action-card{width:100%}
+@media(max-width:650px){.bulk-staff-grid{grid-template-columns:1fr}.bulk-quick-actions{grid-template-columns:1fr}.dialog:has(.bulk-dialog){max-height:calc(100dvh - 16px)}}
