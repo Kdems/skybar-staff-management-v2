@@ -371,10 +371,28 @@ function admin(){
     '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT Excel</button></div>'+
     '<div class="card table-wrap">'+(adminOt.length?'<table><thead><tr><th>Staff</th><th>Date</th><th>Shift</th><th>OT Hours</th><th>Claim Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+otRows+'</tbody></table>':
       cardEmpty('No overtime submissions yet.'))+'</div>'+
-    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, download period OT forms matching the supplied reference layout, or export all records to Excel XLSX. Exact hotel HR OT template remains to be matched when its source is available.</div>';
+    '<div class="section-bar"><div><h3>HR Overtime Form Template</h3><p>One approved template for every staff OT download.</p></div><button id="uploadOTTemplateBtn" class="ghost-btn">Upload / Replace Template</button></div>'+
+    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, download original-layout monthly OT forms, or export Excel reports. Upload an approved, macro-free .xlsx form once to activate the shared download template.</div>';
 }
 
 
+function uploadOTTemplate(){
+ if(state.user?.role!=='ADMIN'||state.preview)return toast('Admin only',true);
+ const html='<p class="muted">Upload the approved macro-free <b>.xlsx</b> OT form once. All staff downloads will use this template, preserving its headings, logo, merged cells, borders and signature sections. Max file size: 2 MB.</p>'+
+ '<div class="field"><label for="otMasterFile">Approved OT Excel template (.xlsx)</label><input type="file" id="otMasterFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></div>'+
+ '<div class="soft-note">The original 2009 .xls file contains VBA macros. Save a clean .xlsx copy in Excel before uploading. Template replacement is audited and never changes OT claim records.</div>';
+ customForm('Admin · Replace HR Overtime Form Template',html,'Upload & Activate Template',async()=>{
+   const file=$('otMasterFile').files?.[0];
+   if(!file||!file.name.toLowerCase().endsWith('.xlsx'))throw Error('Select an .xlsx file');
+   if(file.size<300||file.size>2097152)throw Error('Template must be 300 bytes to 2 MB');
+   const bytes=new Uint8Array(await file.arrayBuffer());
+   if(bytes[0]!==80||bytes[1]!==75||bytes[2]!==3||bytes[3]!==4)throw Error('Invalid Excel XLSX format');
+   let text='';
+   for(let i=0;i<bytes.length;i+=12000)text+=String.fromCharCode(...bytes.subarray(i,i+12000));
+   const base64=btoa(text);
+   await adminCommit('adminUploadOTTemplate',{filename:file.name,base64},'HR OT template updated for all staff');
+ });
+}
 async function printOT(id,admin=false){
  if(state.preview)return toast('Preview is read-only',true);
  const all=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
@@ -386,7 +404,8 @@ async function printOT(id,admin=false){
   if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT form exporter is not loaded');
   toast('Preparing original-layout OT Excel form…');
   const result=await window.SKYBAR_OT_FORM_GENERATOR.download({
-    selected,records:all,employee,preparedBy:state.user.name
+    selected,records:all,employee,preparedBy:state.user.name,
+    loadTemplate:()=>call('getOTTemplate')
   });
   toast('OT form ready: '+result.count+' claim(s) · '+result.periodStart+' to '+result.periodEnd);
  }catch(e){toast(e?.message||'Failed to create OT form',true)}
@@ -644,6 +663,7 @@ document.querySelectorAll('[data-edit-leave-type]').forEach(x=>x.onclick=()=>edi
 document.querySelectorAll('[data-admin-report]').forEach(el=>el.onclick=()=>exportAdminReport(el.dataset.adminReport));
 $('exportOTBtn')?.addEventListener('click',exportOT);
 document.querySelectorAll('[data-ot-action]').forEach(el=>el.onclick=()=>otStatusAction(el.dataset.otAction,el.dataset.otDecision));
+$('uploadOTTemplateBtn')?.addEventListener('click',uploadOTTemplate);
 document.querySelectorAll('[data-print-admin-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printAdminOt,true));
 document.querySelectorAll('[data-print-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printOt,false));
 document.querySelectorAll('[data-cancel-ot]').forEach(el=>el.onclick=()=>cancelOT(el.dataset.cancelOt));
