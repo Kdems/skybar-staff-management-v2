@@ -458,15 +458,21 @@ async function printOT(id,admin=false){
  }catch(e){toast(e?.message||'Unable to prepare OT form',true)}
 }
 function otStatusAction(id,decision){
- if(state.preview||state.user?.role!=='ADMIN')return toast('Admin access only',true);
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
  const item=(state.overview.adminOt||[]).find(x=>x.id===id);
- if(!item||item.status!=='PENDING')return toast('Only pending OT may be decided',true);
- if(!['APPROVED','REJECTED'].includes(decision))return;
- const form='<p class="muted">'+esc(item.employee_name)+' · '+fmt(item.ot_date)+' · '+num(item.ot_minutes/60)+' OT hours</p>'+
- '<div class="field"><label for="otNote">Admin note '+(decision==='REJECTED'?'(required)':'(optional)')+'</label><textarea id="otNote" maxlength="500"></textarea></div>';
- customForm((decision==='APPROVED'?'Approve':'Reject')+' Overtime',form,'Confirm Decision',async()=>{
+ if(!item)return toast('OT record not found',true);
+ const cancelApproved=decision==='CANCELLED'&&item.status==='APPROVED';
+ if(!((item.status==='PENDING'&&['APPROVED','REJECTED'].includes(decision))||cancelApproved))
+   return toast('OT decision is not allowed for this status',true);
+ const verb={APPROVED:'Approve',REJECTED:'Reject',CANCELLED:'Cancel Approved'}[decision];
+ const form='<p class="muted">'+esc(item.employee_name)+' · '+fmt(item.ot_date)+
+ ' · '+num(item.ot_minutes/60)+' OT hours · '+esc(item.status)+'</p>'+
+ '<div class="field"><label for="otNote">Admin reason'+(decision==='APPROVED'?' (optional)':' (required)')+
+ '</label><textarea id="otNote" maxlength="500" placeholder="Reason for decision"></textarea></div>'+
+ (cancelApproved?'<div class="soft-note">The approved claim will be marked CANCELLED and excluded from HR payroll exports. This action is audited.</div>':'');
+ customForm(verb+' Overtime',form,'Confirm '+verb,async()=>{
   const note=$('otNote').value.trim();
-  if(decision==='REJECTED'&&note.length<3)throw Error('Rejection requires a reason');
+  if(decision!=='APPROVED'&&note.length<3)throw Error('Enter reason (at least 3 characters)');
   await adminCommit('decideOT',{requestId:id,status:decision,note},'Overtime '+decision.toLowerCase());
  });
 }
