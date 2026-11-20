@@ -153,6 +153,58 @@ async function bootstrap(staff:Staff){
     ...admin
   }};
 }
+
+async function fetchRowsPaged(resource:string,select:string,order:string){
+ const result:any[]=[];
+ for(let offset=0;offset<5000;offset+=1000){
+  const page=await request(resource+"?select="+select+"&order="+order+"&limit=1000&offset="+offset);
+  result.push(...page);
+  if(page.length<1000)return result;
+ }
+ throw new ApiError("Report exceeds 5,000 records; narrow reporting period before export",400);
+}
+async function adminReportData(report:string){
+ const kind=String(report||"").toLowerCase();
+ if(!["leave","ot","staff","al","ph","audit"].includes(kind))throw new ApiError("Invalid report");
+ const base=await fetchRowsPaged("staff","id,employee_id,name,position,department,role,employment_status,active","name.asc");
+ const people=new Map(base.map((x:any)=>[x.id,x]));
+ const person=(id:string)=>people.get(id)||{};
+ if(kind==="staff")return{
+  columns:["Employee ID","Name","Position","Department","Role","Employment Status","Active"],
+  rows:base.map((x:any)=>[x.employee_id,x.name,x.position,x.department,x.role,x.employment_status||"",x.active?"YES":"NO"])
+ };
+ if(kind==="leave"){
+  const rr=await fetchRowsPaged("leave_requests",
+   "request_code,staff_id,leave_type,duration,start_date,end_date,units,status,reason,admin_note,submitted_at,decided_at",
+   "submitted_at.desc");
+  return {columns:["Request Ref","Staff ID","Employee","Type","Duration","Start","End","Days","Status","Reason","Admin Note","Submitted","Decided"],
+  rows:rr.map((x:any)=>[x.request_code,person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.leave_type,
+    x.duration,x.start_date,x.end_date,x.units,x.status,x.reason,x.admin_note||"",x.submitted_at,x.decided_at||""])};
+ }
+ if(kind==="ot"){
+  const rr=await fetchRowsPaged("overtime_requests",
+   "staff_id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,status,reason,admin_note,created_at,decided_at",
+   "created_at.desc");
+  return {columns:["Staff ID","Employee","OT Date","Shift Start","Shift End","Total Shift Hours","OT Hours","Claim Type","Status","Reason","Admin Note","Submitted","Decided"],
+   rows:rr.map((x:any)=>[person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.ot_date,x.shift_start,
+   x.shift_end,Number(x.total_shift_minutes)/60,Number(x.ot_minutes)/60,x.claim_type,x.status,x.reason,x.admin_note||"",x.created_at,x.decided_at||""])};
+ }
+ if(kind==="al"){
+  const rr=await fetchRowsPaged("al_balances","staff_id,source_year,entitlement,carry_forward,adjustment,notes","source_year.desc");
+  return {columns:["Staff ID","Employee","Year","Entitlement","Carry Forward","Adjustment","Allocated Total","Notes"],
+   rows:rr.map((x:any)=>[person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.source_year,
+   x.entitlement,x.carry_forward,x.adjustment,Number(x.entitlement)+Number(x.carry_forward)+Number(x.adjustment),x.notes||""])};
+ }
+ if(kind==="ph"){
+  const rr=await fetchRowsPaged("ph_credits","staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes","source_year.desc");
+  return {columns:["Staff ID","Employee","Source Year","Holiday","Date","Credit Days","Unlock Mode","Active","Notes"],
+   rows:rr.map((x:any)=>[person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.source_year,
+    x.holiday_name,x.holiday_date||"",x.units,x.release_mode,x.active?"YES":"NO",x.notes||""])};
+ }
+ const rr=await fetchRowsPaged("audit_log","actor_staff_id,action,record_id,created_at","created_at.desc");
+ return {columns:["Logged At","Actor ID","Actor Name","Action","Record ID"],
+  rows:rr.map((x:any)=>[x.created_at,person(x.actor_staff_id).employee_id||"",person(x.actor_staff_id).name||"",x.action,x.record_id||""])};
+}
 function nextMonth(month:string){let [y,m]=month.split("-").map(Number);m++;if(m===13){m=1;y++}return y+"-"+String(m).padStart(2,"0")}
 serve(async req=>{
   const origin=req.headers.get("origin");
@@ -180,6 +232,10 @@ serve(async req=>{
     }
     if(input.action==="cancelLeave"){
       return json(await rpc("change_leave_status_v2",{p_actor:staff.id,p_request:input.requestId,p_status:"CANCELLED"}),200,origin);
+    }
+    if(input.action==="adminReport"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await adminReportData(String(input.report||"")),200,origin);
     }
     if(input.action==="adminChangeLeaveType"){
       if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
