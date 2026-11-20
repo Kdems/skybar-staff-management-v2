@@ -208,7 +208,7 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
  const {from,to,nextMonth}=getPeriod(selected.ot_date);
  const source=(records||[]).filter(r=>
   r.staff_id===selected.staff_id &&
-  r.ot_date>=toISO(from)&&r.ot_date<=toISO(to)&&r.status!=='CANCELLED'
+  r.ot_date>=toISO(from)&&r.ot_date<=toISO(to)&&['PENDING','APPROVED'].includes(r.status)
  );
  const byDay=new Map();
  for(const row of source){
