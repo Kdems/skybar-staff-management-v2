@@ -47,7 +47,7 @@ function history(){
   ots.map(r=>'<tr><td>'+fmt(r.ot_date)+'</td><td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+
   '</td><td>'+num(Number(r.ot_minutes)/60)+'</td><td>'+status(r.status)+
   (r.admin_note?'<div class="muted">Admin: '+esc(r.admin_note)+'</div>':'')+
-  '</td><td><div class="staff-actions"><button class="ghost-btn" data-print-ot="'+esc(r.id)+'">Print Form</button>'+
+  '</td><td><div class="staff-actions"><button class="ghost-btn" data-print-ot="'+esc(r.id)+'">Download OT Form</button>'+
   (r.status==='PENDING'?'<button class="ghost-btn" data-cancel-ot="'+esc(r.id)+'">Cancel</button>':'')+
   '</div></td></tr>').join('')+'</tbody></table>':cardEmpty('No overtime submissions yet.'))+'</div>';
 }
@@ -337,7 +337,7 @@ function admin(){
   const otRows=adminOt.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b></td><td>'+fmt(r.ot_date)+'</td>'+
    '<td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+'</td><td>'+num(Number(r.ot_minutes)/60)+'</td>'+
    '<td>'+esc(r.claim_type)+'</td><td>'+status(r.status)+'</td><td><div class="staff-actions">'+
-   '<button class="ghost-btn" data-print-admin-ot="'+esc(r.id)+'">Print</button>'+
+   '<button class="ghost-btn" data-print-admin-ot="'+esc(r.id)+'">Download Form</button>'+
    (r.status==='PENDING'?'<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="APPROVED">Approve</button>'+
     '<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="REJECTED">Reject</button>':'')+
    '</div></td></tr>').join('');
@@ -371,37 +371,25 @@ function admin(){
     '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT Excel</button></div>'+
     '<div class="card table-wrap">'+(adminOt.length?'<table><thead><tr><th>Staff</th><th>Date</th><th>Shift</th><th>OT Hours</th><th>Claim Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+otRows+'</tbody></table>':
       cardEmpty('No overtime submissions yet.'))+'</div>'+
-    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, print individual claims, or export all records to Excel XLSX. Exact hotel HR OT template remains to be matched when its source is available.</div>';
+    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, download period OT forms matching the supplied reference layout, or export all records to Excel XLSX. Exact hotel HR OT template remains to be matched when its source is available.</div>';
 }
 
 
-function printOT(id,admin=false){
- const records=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
- const record=records.find(r=>r.id===id);
- if(!record)return toast('OT request not found',true);
- const profile=admin?staffById(record.staff_id):state.user;
- const employee=admin?record.employee_name:state.user.name;
- const rows=[
-  ['Employee',employee],['Employee ID',profile?.employee_id||''],
-  ['Position',profile?.position||''],['OT Date',fmt(record.ot_date)],
-  ['Shift',record.shift_start+' – '+record.shift_end],
-  ['Total Shift',num(Number(record.total_shift_minutes)/60)+' hours'],
-  ['Less Normal Shift','9 hours'],
-  ['Claimable OT',num(Number(record.ot_minutes)/60)+' hours'],
-  ['Claim Type',record.claim_type||''],
-  ['Reason',record.reason||''],['Status',record.status||''],
-  ['Admin Note',record.admin_note||'—']
- ];
- const markup='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SkyBar OT Claim</title><style>'+
- 'body{font:14px Arial,sans-serif;max-width:780px;margin:45px auto;color:#171717}h1,h2{text-align:center}h1{font-size:19px;margin-bottom:5px}h2{font-size:16px;margin:0 0 30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:10px;text-align:left}th{background:#eee;width:36%}.sign{display:flex;gap:30px;margin-top:65px}.sign div{flex:1;border-top:1px solid #333;padding-top:10px}p{font-size:11px;color:#666}@media print{body{margin:0;max-width:none}}</style></head><body>'+
- '<h1>TRADERS HOTEL KUALA LUMPUR</h1><h2>SKYBAR · OVERTIME CLAIM</h2><table>'+
- rows.map(([k,v])=>'<tr><th>'+esc(k)+'</th><td>'+esc(v)+'</td></tr>').join('')+
- '</table><div class="sign"><div>Employee Signature / Date</div><div>Department Head / Date</div><div>HR Verification / Date</div></div>'+
- '<p>SkyBar V2 operational printout. Not certified as identical to the original hotel HR OT Excel form.</p></body></html>';
- const w=window.open('','_blank');
- if(!w)return toast('Please allow pop-ups for printing',true);
- w.document.write(markup);w.document.close();w.focus();
- w.setTimeout(()=>w.print(),350);
+async function printOT(id,admin=false){
+ if(state.preview)return toast('Preview is read-only',true);
+ const all=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
+ const selected=all.find(r=>r.id===id);
+ if(!selected)return toast('OT request not found',true);
+ const employee=admin?staffById(selected.staff_id):state.user;
+ if(!employee)return toast('Employee profile not found',true);
+ try{
+  if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT form exporter is not loaded');
+  toast('Preparing original-layout OT Excel form…');
+  const result=await window.SKYBAR_OT_FORM_GENERATOR.download({
+    selected,records:all,employee,preparedBy:state.user.name
+  });
+  toast('OT form ready: '+result.count+' claim(s) · '+result.periodStart+' to '+result.periodEnd);
+ }catch(e){toast(e?.message||'Failed to create OT form',true)}
 }
 function otStatusAction(id,decision){
  if(state.preview||state.user?.role!=='ADMIN')return toast('Admin access only',true);
