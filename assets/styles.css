@@ -30,3 +30,5 @@
 .bulk-quick-actions{margin-bottom:20px}
 .bulk-quick-actions .action-card{width:100%}
 @media(max-width:650px){.bulk-staff-grid{grid-template-columns:1fr}.bulk-quick-actions{grid-template-columns:1fr}.dialog:has(.bulk-dialog){max-height:calc(100dvh - 16px)}}
+
+.bulk-fill{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:12px;border-radius:12px;background:#172e48;border:1px solid var(--line)}.bulk-fill .field{width:min(330px,100%)}.bulk-fill .field label{margin-top:0}.bulk-fill .ghost-btn{min-height:43px}
