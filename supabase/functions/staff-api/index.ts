@@ -263,6 +263,29 @@ serve(async req=>{
         p_actor:staff.id,p_request:input.requestId,p_status:"CANCELLED",p_admin_note:""
       }),200,origin);
     }
+    if(input.action==="getOTPeriod"){
+      const date=String(input.date||"");
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new ApiError("Invalid OT date");
+      const dateObj=new Date(date+"T12:00:00Z");
+      if(Number.isNaN(dateObj.getTime())||dateObj.toISOString().slice(0,10)!==date)
+        throw new ApiError("Invalid OT calendar date");
+      const staffId=staff.role==="ADMIN"?String(input.staffId||staff.id):staff.id;
+      if(!/^[a-f0-9-]{36}$/i.test(staffId))throw new ApiError("Invalid staff account");
+      const person=await request("staff?id=eq."+encodeURIComponent(staffId)+
+        "&select=id,employee_id,name,position,department,role,active&limit=1");
+      if(!person.length)throw new ApiError("Staff account not found");
+      // Use UTC date arithmetic for calendar dates without timezone rollover.
+      const d=dateObj.getUTCDate();
+      const start=new Date(Date.UTC(dateObj.getUTCFullYear(),dateObj.getUTCMonth()-(d<16?1:0),16));
+      const last=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+1,15));
+      const first=start.toISOString().slice(0,10),final=last.toISOString().slice(0,10);
+      const rows=await request("overtime_requests?staff_id=eq."+encodeURIComponent(staffId)+
+        "&ot_date=gte."+first+"&ot_date=lte."+final+
+        "&select=id,staff_id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,status,admin_note,created_at"+
+        "&order=ot_date.asc,created_at.asc&limit=251");
+      if(rows.length>=251)throw new ApiError("Too many OT records for one period; contact Admin");
+      return json({employee:person[0],periodStart:first,periodEnd:final,records:rows},200,origin);
+    }
     if(input.action==="getOTTemplate"){
       return json(await rpc("get_ot_form_v2",{}),200,origin);
     }
