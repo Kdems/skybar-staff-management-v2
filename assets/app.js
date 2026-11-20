@@ -75,6 +75,79 @@ function balances(){
   '<div class="card table-wrap">'+(phRows.length?'<table><thead><tr><th>Staff</th><th>Year</th><th>Holiday</th><th>Holiday Date</th><th>Credit</th><th>Reserved</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+phTable+'</tbody></table>':cardEmpty('No PH credits for these filters.'))+'</div>'+
   '<div class="soft-note" style="margin-top:16px">Admin can prepare credits now. Live leave submissions stay locked until 1 January 2027; PH is consumed oldest-first.</div>';
 }
+
+function editAL(staffId){
+ if(state.preview)return toast('Preview mode is read-only',true);
+ const employee=staffById(staffId);
+ if(!employee)return toast('Staff not found',true);
+ const year=state.alYear;
+ const a=(state.overview.alAllocations||[]).find(x=>x.staff_id===staffId&&Number(x.source_year)===year);
+ const fields='<p class="muted"><b>'+esc(employee.name)+'</b> · '+esc(employee.employee_id)+' · '+year+'</p>'+
+  '<div class="form-grid">'+
+  formField('Yearly entitlement (days)','alEnt',a?.entitlement??0,'required min="0" max="365" step="0.5"','number')+
+  formField('Carry-forward into '+year,'alCF',a?.carry_forward??0,'required min="0" max="365" step="0.5"','number')+
+  formField('Adjustment (+/-)','alAdj',a?.adjustment??0,'required min="-365" max="365" step="0.5"','number')+
+  '</div><div class="field"><label for="alNote">Reference / notes</label><textarea id="alNote" maxlength="500">'+esc(a?.notes||'')+'</textarea></div>'+
+  '<div class="soft-note" style="margin-top:12px">2027 balances may be prepared now. Staff can use them from January 2027. Credits cannot be reduced below leave already reserved.</div>';
+ customForm('Annual Leave '+year,fields,'Save AL',async()=>{
+  const ent=Number($('alEnt').value),cf=Number($('alCF').value),adj=Number($('alAdj').value);
+  const values=[ent,cf,adj];
+  if(values.some(n=>!Number.isFinite(n)||n*2!==Math.trunc(n*2))||ent<0||cf<0||ent+cf+adj<0||ent+cf+adj>365)
+    throw Error('AL must be in whole or half days; total must be 0–365.');
+  await adminCommit('adminSaveAL',{allocation:{staffId,year,entitlement:ent,carryForward:cf,adjustment:adj,notes:$('alNote').value.trim()}},'AL balance saved');
+ });
+}
+function editPH(creditId=null){
+ if(state.preview)return toast('Preview mode is read-only',true);
+ const item=creditId?(state.overview.phCredits||[]).find(p=>p.id===creditId):null;
+ if(creditId&&!item)return toast('PH credit not found',true);
+ const employees=state.overview.employees||[];
+ if(!employees.length)return toast('Register a staff account first',true);
+ const selectedStaff=item?.staff_id||(state.phStaff==='ALL'?employees[0].id:state.phStaff);
+ const year=Number(item?.source_year||(state.phYear==='ALL'?2027:state.phYear));
+ const staffOptions=employees.map(p=>'<option value="'+esc(p.id)+'" '+(p.id===selectedStaff?'selected':'')+'>'+esc(p.name)+' · '+esc(p.employee_id)+'</option>').join('');
+ const yearOptions=[2025,2026,2027,2028,2029].map(n=>'<option value="'+n+'" '+(n===year?'selected':'')+'>'+n+'</option>').join('');
+ const suggestions=commonPH.map(n=>'<option value="'+esc(n)+'"></option>').join('');
+ const inputs='<div class="form-grid">'+
+  '<div class="field"><label for="phEmployee">Employee</label><select id="phEmployee">'+staffOptions+'</select></div>'+
+  '<div class="field"><label for="phSourceYear">Source year</label><select id="phSourceYear">'+yearOptions+'</select></div>'+
+  '<div class="field full"><label for="phName">Holiday name</label><input id="phName" list="phList" value="'+esc(item?.holiday_name||'')+'" maxlength="160" placeholder="Name or Additional PH" required><datalist id="phList">'+suggestions+'</datalist></div>'+
+  formField('Actual holiday date','phActualDate',item?.holiday_date||'','','date')+
+  formField('PH credit (days)','phQuantity',item?.units??1,'min="0.5" max="30" step="0.5" required','number')+
+  '<div class="field full"><label for="phReleaseType">Release method</label><select id="phReleaseType"><option value="AUTO_DATE">Auto-unlock on holiday date</option><option value="MANUAL">Already-earned historical PH</option></select></div></div>'+
+  '<div class="field"><label for="phNote">Notes / reference</label><textarea id="phNote" maxlength="500">'+esc(item?.notes||'')+'</textarea></div>'+
+  '<div class="soft-note" style="margin-top:12px">For 2027 and later PH, choose Auto-unlock and enter the correct date. Do not use Manual for future PH. Historical credits remain usable until consumed.</div>';
+ customForm(item?'Edit PH Credit':'Add PH Credit',inputs,item?'Save PH':'Create PH',async()=>{
+  const p={
+   id:creditId,
+   staffId:$('phEmployee').value,
+   year:Number($('phSourceYear').value),
+   holidayName:$('phName').value.trim(),
+   holidayDate:$('phActualDate').value||null,
+   units:Number($('phQuantity').value),
+   releaseMode:$('phReleaseType').value,
+   notes:$('phNote').value.trim()
+  };
+  if(p.holidayName.length<2||!Number.isFinite(p.units)||p.units<0.5||p.units>30||p.units*2!==Math.trunc(p.units*2))
+    throw Error('Enter holiday name and PH days in half-day increments');
+  if(p.releaseMode==='AUTO_DATE'&&!p.holidayDate)throw Error('Date required for automatic PH unlock');
+  if(p.holidayDate&&Number(p.holidayDate.slice(0,4))!==p.year)throw Error('PH date and source year must match');
+  await adminCommit('adminSavePH',{credit:p},'PH credit saved');
+ });
+ $('phReleaseType').value=item?.release_mode||(year<=2025?'MANUAL':'AUTO_DATE');
+}
+function togglePH(creditId){
+ if(state.preview)return;
+ const p=(state.overview.phCredits||[]).find(x=>x.id===creditId);
+ if(!p)return toast('PH credit not found',true);
+ const next=!p.active;
+ modal((next?'Reactivate':'Deactivate')+' PH credit?',
+  p.holiday_name+' ('+p.source_year+'). Existing pending or approved PH leave must be preserved.',
+  [{text:'Back'},{text:'Confirm',primary:true,action:async()=>{
+    try{await call('adminTogglePH',{creditId,active:next});await reload();toast('PH credit status updated')}
+    catch(e){toast(e.message,true)}
+  }}]);
+}
 function admin(){
   if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
   const people=state.overview.employees||[];
