@@ -16,7 +16,7 @@
 | **Admin-only OFF** | Server-side admin check, staff dropdown does not contain OFF; OFF keeps leave slot and does not debit AL/PH | SQL 006, Edge deploy, UAT |
 | OT submission and automatic 9h deduction | Implemented | End-to-end UAT |
 | **OT approval / reject / pending cancel** | **Migration 007 + Edge API + frontend committed** | SQL 007, Edge deploy, UAT |
-| **OT print claim / Excel XLSX exports** | Implemented, generic document format | Confirm exact hotel's HR template before claiming template parity |
+| **HR OT form + XLSX reports** | Source workbook layout, approved-only Admin export and employee-named sheet committed | Exact Microsoft Excel Print Preview comparison during final UAT |
 | **Reports & Audit** | Admin-only paginated exports to native XLSX | Deploy latest Edge API, UAT |
 | Automated backups | **Not configured by source code** | Check Supabase plan backups and establish protected recovery exports |
 | Security audit / release operations | Engineering checklist below | Execute with authorized admin and hotel IT |
@@ -33,7 +33,7 @@
 6. Keep `submit_leave_v2` and `submit_overtime_v2` locked before 2027-01-01. Never run `supabase/staging/uat_leave_bypass_only.sql` against production.
 7. Only **after** all of these changes are deployed: perform one combined UAT in a separate database/Worker, review OT print parity in Microsoft Excel, and obtain HR/IT sign-off before opening staff production.
 
-**Do not run 006, 007, 008 or 009 separately after the combined release.** The three original files remain in GitHub for source transparency and troubleshooting, not as an additional install step.
+**Do not run 006, 007, 008 or 009 separately after the combined release.** The four original files remain in GitHub for source transparency and troubleshooting, not as an additional install step.
 
 **Rollback:** Record exact previous Edge/Cloudflare versions before deployment and retain an approved DB backup. The combined SQL adds new table/function/columns and expands a check constraint; do not blindly drop the new schema if transactions were recorded after the upgrade.
 
@@ -55,7 +55,7 @@
 - Working baseline: 9 hours; overtime is measured as elapsed shift minutes minus 540.
 - Admin can Approve or Reject a **Pending** claim. Rejection requires an explanation; staff can Cancel their own Pending claim.
 - Already decided OT cannot be approved, rejected or cancelled again via the API.
-- Staff can print a generic claim form. The original hotel OT `.xls` was supplied and inspected. An approximate reconstruction was rejected for fidelity. Always upload an `.xlsx` converted from the ORIGINAL `.xls` using Microsoft Excel Save As; the tool now preserves original visual/style parts and checks template identity. SQL 008 enables Admin to upload the approved workbook through Admin → OT Approval & Reporting → Upload / Replace Template. Exact visual parity should be reviewed in Excel during combined UAT.
+- Only Admin can download an approved-only HR OT workbook for a selected employee and 16th–15th payroll period; resigned staff remain selectable. The original hotel OT `.xls` was supplied and inspected. An approximate reconstruction was rejected for fidelity. Always upload an `.xlsx` converted from the ORIGINAL `.xls` using Microsoft Excel Save As; the tool now preserves original visual/style parts and checks template identity. SQL 008 enables Admin to upload the approved workbook through Admin → OT Approval & Reporting → Upload / Replace Template. Exact visual parity should be reviewed in Excel during combined UAT.
 - Admin reports are available as XLSX files via client-side export. The exporter is local and does not send data to third-party CDNs.
 
 ## 5. Security and operational readiness before staff access
