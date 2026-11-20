@@ -35,14 +35,153 @@ function calendar(){const today=myDate(),[y,m]=today.split('-').map(Number),week
 function calculateOt(start,end){if(!start||!end)return null;const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);let minutes=(eh*60+em)-(sh*60+sm);if(minutes<=0)minutes+=1440;const ot=Math.max(0,minutes-540),fmtTime=n=>String(Math.floor((n%(1440))/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');return{hours:ot/60,otStart:ot?fmtTime(sh*60+sm+540):'—',otEnd:ot?end:'—',total:minutes/60}}
 function overtime(){return title('Overtime submission')+'<div class="card"><form id="otForm"><div class="form-grid"><div class="field"><label>Staff name</label><input disabled value="'+esc(state.user.name)+'"></div><div class="field"><label for="otDate">OT date</label><input type="date" id="otDate" value="'+myDate()+'" required></div><div class="field"><label for="shiftStart">Current Shift — Start</label><input type="time" id="shiftStart" required></div><div class="field"><label for="shiftEnd">Shift End</label><input type="time" id="shiftEnd" required></div><div class="field"><label>Claim Type</label><select id="claimType"><option value="NORMAL">Normal Working Day · x1.5</option><option value="OFF">Off / Rest Day · x2.0</option><option value="PH">Compulsory PH · x3.0</option></select></div><div class="field"><label for="otApprover">Instructed by</label><select id="otApprover"><option value="">Select manager / supervisor</option>'+((state.overview.approvers||[]).map(a=>'<option value="'+esc(a.employee_id)+'">'+esc(a.name)+'</option>').join(''))+'</select></div><div class="field full"><label for="otReason">Reason for overtime</label><textarea id="otReason" placeholder="Describe the work completed" required maxlength="500"></textarea></div></div><div id="otCalc" class="soft-note">Enter shift start and shift end to calculate OT automatically. Normal shift = 9 hours.</div><div class="form-actions"><button type="submit" class="primary-btn" '+(state.preview?'disabled':'')+'>Submit Overtime ↗</button></div></form></div>'}
 function history(){const items=(state.overview.requests||[]);const ots=(state.overview.ot||[]);return title('Leave requests')+'<div class="card table-wrap">'+(items.length?'<table><thead><tr><th>Date</th><th>Type</th><th>Units</th><th>Status</th><th>Action</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+num(r.units)+'</td><td>'+status(r.status)+'</td><td>'+(r.status==='PENDING'?'<button class="ghost-btn" data-cancel="'+esc(r.id)+'">Cancel</button>':'—')+'</td></tr>').join('')+'</tbody></table>':cardEmpty('No leave requests yet.'))+'</div>'+title('Overtime submissions')+'<div class="card table-wrap">'+(ots.length?'<table><thead><tr><th>Date</th><th>Shift</th><th>OT hours</th><th>Status</th></tr></thead><tbody>'+ots.map(r=>'<tr><td>'+fmt(r.ot_date)+'</td><td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+'</td><td>'+num(r.ot_minutes/60)+'</td><td>'+status(r.status)+'</td></tr>').join('')+'</tbody></table>':cardEmpty('No overtime submissions yet.'))+'</div>'}
-function admin(){if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');const pend=state.overview.pending||[];return '<div class="grid grid-3">'+metric('Staff',state.overview.employees?.length||0,'Active accounts')+metric('Pending approval',pend.length,'Leave requests')+metric('Launch date','01 Jan 2027','Go-live locked')+'</div>'+title('Pending leave approvals')+'<div class="card table-wrap">'+(pend.length?'<table><thead><tr><th>Staff</th><th>Dates</th><th>Type</th><th>Reason</th><th>Action</th></tr></thead><tbody>'+pend.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+esc(r.reason)+'</td><td><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="APPROVED">Approve</button> <button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="REJECTED">Reject</button></td></tr>').join('')+'</tbody></table>':cardEmpty('No pending requests.'))+'</div>'+title('Setup checklist')+'<div class="card"><p>Once Supabase is connected, we will add the full employee management, AL allocation, historical PH ledger, payroll OT Excel export, and production readiness tests.</p><div class="soft-note">Security first: Employee PIN verification and database writes happen inside Supabase Edge Functions. No service-role key is exposed in the public GitHub repository.</div></div>'}
-function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));document.querySelectorAll('[data-decision]').forEach(x=>x.onclick=()=>modal(x.dataset.status==='APPROVED'?'Approve leave?':'Reject leave?','This decision will be recorded in the staff leave history.',[{text:'Back'},{text:'Confirm',primary:true,action:async()=>{try{await call('decideLeave',{requestId:x.dataset.decision,status:x.dataset.status});await reload();toast('Decision saved')}catch(e){toast(e.message,true)}}}]))}
+
+function admin(){
+  if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
+  const people=state.overview.employees||[];
+  const pend=state.overview.pending||[];
+  return '<div class="grid grid-3">'+metric('Registered Staff',people.length,'Active and archived')+
+    metric('Pending Approval',pend.length,'Leave requests')+
+    metric('Go-live','01 Jan 2027','Submission lock active')+'</div>'+
+    '<div class="section-bar"><h2>Employee Management</h2><button class="primary-btn" id="addStaffBtn" '+(state.preview?'disabled':'')+'>+ Register Staff</button></div>'+
+    '<div class="card table-wrap">'+(people.length?
+      '<table><thead><tr><th>Staff ID</th><th>Name</th><th>Position</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+
+      people.map(p=>'<tr><td><b>'+esc(p.employee_id)+'</b></td><td>'+esc(p.name)+'</td><td>'+esc(p.position||'—')+
+      '<div class="muted">'+esc(p.department||'SkyBar')+'</div></td><td>'+status(p.employment_status||(p.active?'ACTIVE':'INACTIVE'))+
+      (p.last_working_date?'<div class="muted">'+fmt(p.last_working_date)+'</div>':'')+'</td><td><div class="staff-actions">'+
+      '<button class="ghost-btn" data-edit-staff="'+esc(p.id)+'">Edit</button>'+
+      (p.role!=='ADMIN'?'<button class="ghost-btn" data-staff-status="'+esc(p.id)+'">Status</button>':'')+
+      '<button class="ghost-btn" data-reset-staff-pin="'+esc(p.id)+'">Reset PIN</button>'+
+      (p.role!=='ADMIN'?'<button class="ghost-btn danger-text" data-delete-staff="'+esc(p.id)+'">Delete</button>':'')+
+      '</div></td></tr>').join('')+'</tbody></table>':cardEmpty('No employee records yet.'))+'</div>'+
+    title('Pending Leave Approvals')+'<div class="card table-wrap">'+
+    (pend.length?'<table><thead><tr><th>Staff</th><th>Dates</th><th>Type</th><th>Reason</th><th>Action</th></tr></thead><tbody>'+
+      pend.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+esc(r.reason)+'</td><td><div class="staff-actions"><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="APPROVED">Approve</button><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="REJECTED">Reject</button></div></td></tr>').join('')+'</tbody></table>':
+      cardEmpty('No pending requests.'))+'</div>'+
+    title('Next modules')+'<div class="card"><p class="muted">AL yearly balances, PH bulk calendar and carry-forward, OT approval and downloadable HR Excel form are being migrated to V2. We will test these modules before the January launch.</p></div>';
+}
+function staffById(id){return(state.overview?.employees||[]).find(p=>p.id===id)}
+function formField(label,id,value='',extra='',type='text'){
+  return '<div class="field"><label for="'+esc(id)+'">'+esc(label)+'</label><input id="'+esc(id)+'" type="'+type+'" value="'+esc(value)+'" '+extra+'></div>';
+}
+function customForm(title,html,label,submit){
+  $('modalTitle').textContent=title;
+  $('modalContent').innerHTML=html;
+  $('modalActions').replaceChildren();
+  const close=document.createElement('button');close.className='ghost-btn';close.textContent='Back';close.onclick=closeModal;
+  const save=document.createElement('button');save.className='primary-btn';save.textContent=label;
+  save.onclick=async()=>{
+    save.disabled=true;save.textContent='Saving…';
+    try{await submit()}catch(e){toast(e.message,true)}finally{save.disabled=false;save.textContent=label}
+  };
+  $('modalActions').append(close,save);
+  $('overlay').classList.remove('hidden');
+}
+async function adminCommit(action,payload,message){
+  if(state.preview)throw Error('Preview is read-only');
+  await call(action,payload);
+  closeModal();
+  await reload();
+  toast(message);
+}
+function employeePayload(){
+  const p={employeeId:$('eId').value.trim().toUpperCase(),
+    name:$('eName').value.trim(),position:$('ePosition').value.trim(),
+    department:$('eDepartment').value.trim()};
+  if(!/^[A-Z0-9_-]{2,32}$/.test(p.employeeId)||p.name.length<2||p.position.length<2||p.department.length<2){
+    throw Error('Enter a valid Staff ID, Name, Position and Department');
+  }
+  return p;
+}
+function editStaff(id=null){
+  if(state.preview)return toast('Preview is read-only',true);
+  const p=id?staffById(id):null;
+  if(id&&!p)return toast('Employee not found',true);
+  const isAdmin=p?.role==='ADMIN';
+  const fields='<div class="form-grid">'+
+    formField('Employee ID','eId',p?.employee_id||'',isAdmin?'disabled':'required maxlength="32"')+
+    formField('Full Name','eName',p?.name||'','required maxlength="120"')+
+    formField('Position','ePosition',p?.position||'','required maxlength="120"')+
+    formField('Department','eDepartment',p?.department||'SkyBar','required maxlength="120"')+
+    (!p?formField('Initial PIN (8 digits)','ePin','','required inputmode="numeric" maxlength="8"','password'):'')+
+    '</div>'+
+    '<div class="soft-note" style="margin-top:15px">'+(p?
+      'Staff ID changes preserve existing Leave, PH and OT history. PIN is managed separately.':
+      'A unique 8-digit PIN is required. New accounts start as STAFF and Active.')+'</div>';
+  customForm(p?'Edit Employee':'Register Staff',fields,p?'Save Changes':'Create Staff',async()=>{
+    const data=employeePayload();
+    if(p){await adminCommit('adminUpdateStaff',{employee:{id:p.id,...data}},'Employee profile updated')}
+    else{
+      const pin=$('ePin').value;
+      if(!/^\d{8}$/.test(pin))throw Error('Enter a unique 8-digit PIN');
+      await adminCommit('adminCreateStaff',{employee:{...data,pin}},'Staff account created');
+    }
+  });
+}
+function changeStaffStatus(id){
+  const p=staffById(id);
+  if(!p||state.preview)return;
+  const html='<p class="muted">Update employment status for <b>'+esc(p.name)+'</b> ('+esc(p.employee_id)+'). Resigned and Inactive staff cannot login, but their records remain.</p>'+
+    '<div class="field"><label for="staffNewStatus">New Status</label><select id="staffNewStatus"><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option><option value="RESIGNED">Resigned</option></select></div>'+
+    formField('Last Working Date (required for Resigned)','staffLastDay',p.last_working_date||myDate(),'','date')+
+    '<div class="field"><label for="staffStatusNote">Reason / Note</label><textarea id="staffStatusNote" maxlength="500"></textarea></div>';
+  customForm('Employee Status',html,'Confirm Status',async()=>{
+    const status=$('staffNewStatus').value;
+    if(status==='RESIGNED'&&!$('staffLastDay').value)throw Error('Enter last working date');
+    await adminCommit('adminSetStaffStatus',{
+      staffId:p.id,status,lastWorkingDate:status==='RESIGNED'?$('staffLastDay').value:null,
+      note:$('staffStatusNote').value
+    },'Employee status updated');
+  });
+  $('staffNewStatus').value=p.employment_status||'ACTIVE';
+}
+function resetStaffPin(id){
+  const p=staffById(id);if(!p||state.preview)return;
+  customForm('Reset Staff PIN',
+    '<p class="muted">Reset PIN for <b>'+esc(p.name)+'</b>. Previous login sessions will be invalidated.</p>'+
+    formField('New 8-Digit PIN','staffResetPin','','required inputmode="numeric" maxlength="8"','password'),
+    'Reset PIN',async()=>{
+      const pin=$('staffResetPin').value;
+      if(!/^\d{8}$/.test(pin))throw Error('PIN must be exactly 8 digits');
+      await adminCommit('adminResetStaffPin',{staffId:p.id,newPin:pin},'Staff PIN reset');
+    });
+}
+function deleteUnusedStaff(id){
+  const p=staffById(id);if(!p||state.preview)return;
+  modal('Delete Unused Staff Account?',
+    'Permanently delete '+p.name+' ('+p.employee_id+')? This is permitted only if no Leave, PH, AL, OT or audit history exists. Otherwise, mark Resigned.',
+    [{text:'Keep Account'},{text:'Delete Account',primary:true,action:async()=>{
+      try{await call('adminDeleteUnusedStaff',{staffId:p.id});await reload();toast('Unused employee deleted')}
+      catch(e){toast(e.message,true)}
+    }}]);
+}
+function changeOwnPinModal(){
+  if(state.preview)return toast('Preview is read-only',true);
+  customForm('Change My PIN',
+    formField('Current PIN','ownCurrentPin','','required inputmode="numeric" maxlength="8"','password')+
+    formField('New PIN (8 digits)','ownNewPin','','required inputmode="numeric" maxlength="8"','password')+
+    '<div class="soft-note" style="margin-top:12px">Changing your PIN signs you out from all devices.</div>',
+    'Change PIN',async()=>{
+      const currentPin=$('ownCurrentPin').value,newPin=$('ownNewPin').value;
+      if(!/^\d{8}$/.test(newPin))throw Error('New PIN must be 8 digits');
+      await call('changeOwnPin',{currentPin,newPin});
+      closeModal();state.token='';sessionStorage.removeItem('sb_session');showLogin();
+      toast('PIN changed. Please sign in again.');
+    });
+}
+function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));$('addStaffBtn')?.addEventListener('click',()=>editStaff());
+document.querySelectorAll('[data-edit-staff]').forEach(x=>x.onclick=()=>editStaff(x.dataset.editStaff));
+document.querySelectorAll('[data-staff-status]').forEach(x=>x.onclick=()=>changeStaffStatus(x.dataset.staffStatus));
+document.querySelectorAll('[data-reset-staff-pin]').forEach(x=>x.onclick=()=>resetStaffPin(x.dataset.resetStaffPin));
+document.querySelectorAll('[data-delete-staff]').forEach(x=>x.onclick=()=>deleteUnusedStaff(x.dataset.deleteStaff));
+document.querySelectorAll('[data-decision]').forEach(x=>x.onclick=()=>modal(x.dataset.status==='APPROVED'?'Approve leave?':'Reject leave?','This decision will be recorded in the staff leave history.',[{text:'Back'},{text:'Confirm',primary:true,action:async()=>{try{await call('decideLeave',{requestId:x.dataset.decision,status:x.dataset.status});await reload();toast('Decision saved')}catch(e){toast(e.message,true)}}}]))}
 async function reload(){await load();render()}
 function onLeave(e){e.preventDefault();if(state.preview)return;const p={leaveType:$('leaveType').value,duration:$('leaveDuration').value,startDate:$('leaveStart').value,endDate:$('leaveEnd').value,reason:$('leaveReason').value.trim()};if(p.endDate<p.startDate)return toast('End date cannot be before start date',true);modal('Confirm leave request','Apply for '+(types[p.leaveType]||p.leaveType)+' from '+fmt(p.startDate)+' to '+fmt(p.endDate)+'?', [{text:'Back'},{text:'Submit',primary:true,action:async()=>{try{const r=await call('submitLeave',{request:p});await reload();modal('Request submitted','Your request '+r.requestCode+' is now pending approval.',[{text:'View requests',primary:true,action:()=>navigate('history')}])}catch(e){toast(e.message,true)}}}])}
 function refreshOt(){const calc=calculateOt($('shiftStart').value,$('shiftEnd').value);$('otCalc').textContent=calc?'Total shift: '+calc.total.toFixed(2)+'h · Normal 9h · OT: '+calc.otStart+' – '+calc.otEnd+' ('+calc.hours.toFixed(2)+'h)':'Enter shift start and shift end to calculate OT automatically.'}
 function onOt(e){e.preventDefault();if(state.preview)return;const calc=calculateOt($('shiftStart').value,$('shiftEnd').value);if(!calc||calc.hours<=0)return toast('No overtime detected after 9 working hours.',true);const request={date:$('otDate').value,start:$('shiftStart').value,end:$('shiftEnd').value,claimType:$('claimType').value,approverId:$('otApprover').value,reason:$('otReason').value.trim()};modal('Submit overtime?','Calculated overtime: '+calc.hours.toFixed(2)+' hours. Details will be verified by the server.',[{text:'Back'},{text:'Submit',primary:true,action:async()=>{try{await call('submitOT',{request});await reload();modal('Overtime submitted','Your OT claim was recorded and is pending approval.',[{text:'View requests',primary:true,action:()=>navigate('history')}])}catch(e){toast(e.message,true)}}}])}
 document.querySelectorAll('[data-page]').forEach(x=>x.onclick=()=>navigate(x.dataset.page));
 $('loginForm').addEventListener('submit',login);
+$('changePinButton')?.addEventListener('click',changeOwnPinModal);
 $('previewBtn').onclick=setPreview;
 $('logoutBtn').onclick=async()=>{try{if(!state.preview)await call('logout')}catch{}state.token='';state.preview=false;sessionStorage.removeItem('sb_session');showLogin()};
 if(!API){$('setupNote').classList.remove('hidden');$('previewBtn').classList.remove('hidden')}
