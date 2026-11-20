@@ -117,7 +117,7 @@ async function bootstrap(staff:Staff){
   let admin:any={};
   if(staff.role==="ADMIN"){
     const [employees,pending]=await Promise.all([
-      request("staff?select=id,employee_id,name,position,role,active&order=name.asc"),
+      request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc")
     ]);
     const names=new Map(employees.map((e:any)=>[e.id,e.name]));
@@ -166,6 +166,52 @@ serve(async req=>{
       return json(await rpc("submit_overtime_v2",{
         p_staff_id:staff.id,p_date:p.date,p_start:p.start,p_end:p.end,p_claim_type:p.claimType,
         p_reason:p.reason,p_approver:p.approverId||null
+      }),200,origin);
+    }
+
+    if(input.action==="adminCreateStaff"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.employee||{};
+      return json(await rpc("employee_create_v2",{
+        p_actor:staff.id,p_employee_id:String(p.employeeId||""),
+        p_name:String(p.name||""),p_position:String(p.position||""),
+        p_department:String(p.department||"SkyBar"),p_pin:String(p.pin||"")
+      }),200,origin);
+    }
+    if(input.action==="adminUpdateStaff"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.employee||{};
+      return json(await rpc("employee_update_v2",{
+        p_actor:staff.id,p_target:p.id,
+        p_employee_id:String(p.employeeId||""),p_name:String(p.name||""),
+        p_position:String(p.position||""),p_department:String(p.department||"SkyBar")
+      }),200,origin);
+    }
+    if(input.action==="adminSetStaffStatus"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("employee_status_v2",{
+        p_actor:staff.id,p_target:input.staffId,
+        p_status:String(input.status||""),
+        p_last_working_date:input.lastWorkingDate||null,
+        p_note:String(input.note||"")
+      }),200,origin);
+    }
+    if(input.action==="adminResetStaffPin"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("employee_reset_pin_v2",{
+        p_actor:staff.id,p_target:input.staffId,p_pin:String(input.newPin||"")
+      }),200,origin);
+    }
+    if(input.action==="adminDeleteUnusedStaff"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("employee_delete_unused_v2",{
+        p_actor:staff.id,p_target:input.staffId
+      }),200,origin);
+    }
+    if(input.action==="changeOwnPin"){
+      return json(await rpc("employee_change_own_pin_v2",{
+        p_actor:staff.id,p_old_pin:String(input.currentPin||""),
+        p_new_pin:String(input.newPin||"")
       }),200,origin);
     }
     throw new ApiError("Unknown action",404);
