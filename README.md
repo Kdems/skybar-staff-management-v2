@@ -160,9 +160,9 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 
 ## Upcoming milestones
 
-1. Run migrations **006, 007, 008 and 009** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
+1. Back up production; run **only** `20261121_006_009_final_combined_release.sql` once (includes all four migrations), then deploy latest `staff-api` once.
 2. Confirm the GitHub main frontend has been published to Cloudflare and no backend files are publicly served.
 3. Complete single combined UAT (including OFF Admin correction, OT and XLSX downloads) in isolated staging only.
-4. Obtain original hotel OT Excel form to match its exact HR layout; the operational print form is generic.
+4. Upload the source-preserving `SkyBar_OT_Master_Original_Format.xlsx` in Admin after Edge deployment; the workbook exporter preserves the original HR structure. Verify print parity in the final UAT.
 5. Configure backups, rehearse restore, complete security review and management sign-off.
 6. Production cutover target **1 January 2027**.
