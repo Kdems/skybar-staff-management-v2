@@ -53,13 +53,13 @@ async function sha256(value:string){
 }
 function id(){return crypto.randomUUID()}
 function tokenValue(){const bytes=crypto.getRandomValues(new Uint8Array(32));return Array.from(bytes).map(x=>x.toString(16).padStart(2,"0")).join("")}
-type Staff = {id:string;employee_id:string;name:string;position:string;role:string;active:boolean};
+type Staff = {id:string;employee_id:string;name:string;position:string;department:string;role:string;active:boolean};
 async function authenticate(req:Request):Promise<Staff>{
   const token=(req.headers.get("Authorization")||"").replace(/^Bearer\s+/i,"").trim();
   if(!/^[a-f0-9]{64}$/.test(token))throw new ApiError("Session expired. Please sign in again.",401);
   const rows=await request("staff_sessions?token_hash=eq."+encodeURIComponent(await sha256(token))+"&expires_at=gt."+encodeURIComponent(new Date().toISOString())+"&select=staff_id&limit=1");
   if(!rows.length)throw new ApiError("Session expired. Please sign in again.",401);
-  const people=await request("staff?id=eq."+encodeURIComponent(rows[0].staff_id)+"&active=eq.true&select=id,employee_id,name,position,role,active&limit=1");
+  const people=await request("staff?id=eq."+encodeURIComponent(rows[0].staff_id)+"&active=eq.true&select=id,employee_id,name,position,department,role,active&limit=1");
   if(!people.length)throw new ApiError("Account is inactive.",403);
   return people[0];
 }
