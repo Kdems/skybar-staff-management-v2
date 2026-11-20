@@ -337,9 +337,10 @@ function admin(){
   const otRows=adminOt.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b></td><td>'+fmt(r.ot_date)+'</td>'+
    '<td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+'</td><td>'+num(Number(r.ot_minutes)/60)+'</td>'+
    '<td>'+esc(r.claim_type)+'</td><td>'+status(r.status)+'</td><td><div class="staff-actions">'+
-   '<button class="ghost-btn" data-print-admin-ot="'+esc(r.id)+'">Download Form</button>'+
+   (r.status==='APPROVED'?'<button class="ghost-btn" data-print-admin-ot="'+esc(r.id)+'">Download Form</button>':'')+
    (r.status==='PENDING'?'<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="APPROVED">Approve</button>'+
     '<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="REJECTED">Reject</button>':'')+
+   (r.status==='APPROVED'?'<button class="ghost-btn danger-text" data-ot-action="'+esc(r.id)+'" data-ot-decision="CANCELLED">Cancel Approved OT</button>':'')+
    '</div></td></tr>').join('');
   const allLeaves=(state.overview.adminLeaves||[]).filter(r=>['PENDING','APPROVED'].includes(r.status));
   const leaveRows=allLeaves.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b><div class="muted">'+esc(r.request_code||'')+'</div></td>'+
@@ -370,11 +371,21 @@ function admin(){
     '<div class="card table-wrap">'+(leaveRows?
     '<table><thead><tr><th>Employee / Ref</th><th>Leave Dates</th><th>Type</th><th>Days</th><th>Status</th><th>Admin Action</th></tr></thead><tbody>'+leaveRows+'</tbody></table>':
     cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
+    '<div class="section-bar"><h2>HR Overtime Form — Original Excel</h2></div>'+
+    '<div class="card"><div class="form-grid"><div class="field"><label for="hrOTEmployee">Employee (including resigned staff)</label>'+
+    '<select id="hrOTEmployee"><option value="">Select employee</option>'+
+    people.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name)+' · '+esc(p.employee_id)+
+      (p.employment_status==='RESIGNED'?' (Resigned)':'')+'</option>').join('')+
+    '</select></div>'+
+    '<div class="field"><label for="hrOTMonth">Payroll Cycle Starting Month (16th–15th)</label>'+
+    '<input type="month" id="hrOTMonth" value="'+payrollCycleMonth()+'"></div></div>'+
+    '<p class="muted">Exports only APPROVED OT claims. The original HR workbook, logo, approval blocks and Excel print layout are preserved.</p>'+
+    '<div class="form-actions"><button id="downloadHrOTBtn" class="primary-btn" type="button">Download HR OT Form (.xlsx)</button></div></div>'+
     '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT Excel</button></div>'+
     '<div class="card table-wrap">'+(adminOt.length?'<table><thead><tr><th>Staff</th><th>Date</th><th>Shift</th><th>OT Hours</th><th>Claim Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+otRows+'</tbody></table>':
       cardEmpty('No overtime submissions yet.'))+'</div>'+
-    '<div class="section-bar"><div><h3>HR Overtime Form Template</h3><p>One approved template for every staff OT download.</p></div><button id="uploadOTTemplateBtn" class="ghost-btn">Upload / Replace Template</button></div>'+
-    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, download original-layout monthly OT forms, or export Excel reports. Upload an approved, macro-free .xlsx form once to activate the shared download template.</div>';
+    '<div class="section-bar"><div><h3>HR Overtime Form Template</h3><p>One approved HR master template for Admin payroll exports.</p></div><button id="uploadOTTemplateBtn" class="ghost-btn">Upload / Replace Template</button></div>'+
+    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, cancel an approved claim with a reason, download APPROVED-ONLY HR forms by employee and 16th–15th payroll cycle, or export Excel reports. Upload an approved, macro-free .xlsx form once to activate the shared download template.</div>';
 }
 
 
