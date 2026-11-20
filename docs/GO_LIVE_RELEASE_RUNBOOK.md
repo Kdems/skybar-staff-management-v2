@@ -26,14 +26,14 @@
 **No further individual feature UAT until all V2 source and database migrations are complete.**
 
 1. Confirm this is the current SkyBar V2 production Supabase project. Back up the existing data first, and retain a known-good copy of the deployed Edge Function.
-2. Open Supabase SQL Editor and run **only** `supabase/migrations/20261121_006_008_combined_release.sql` ONCE. It applies 006, 007 and 008 atomically, refuses an isolated UAT database, and checks that the 1 January 2027 submission lock still exists.
+2. Open Supabase SQL Editor and run **only** `supabase/migrations/20261121_006_009_final_combined_release.sql` ONCE. It applies 006, 007, 008 and 009 atomically, refuses an isolated UAT database, and checks that the 1 January 2027 submission lock still exists.
 3. In Supabase Edge Functions → `staff-api`, replace with the latest `supabase/functions/staff-api/index.ts` from GitHub `main` and deploy once. Keep Verify JWT OFF for the existing custom staff session authentication.
 4. Cloudflare Git deploy: verify `main` and the committed `wrangler.jsonc` are used, and the **strict** `.assetsignore` allows exactly `index.html`, `config.js`, `assets/app.js`, `assets/styles.css`, `assets/ot-form-generator.js`. No `/supabase/`, `/docs/`, `/README.md` or `/wrangler.jsonc` may be publicly retrievable.
 5. Admin → OT Approval & Reporting → Upload / Replace Template → upload `SkyBar_OT_Master_Original_Format.xlsx`, based on the real source `OT form.xlsx`. This workbook contains the original sheet, embedded hotel logo, 28 merge ranges, fonts and print settings. No employee data is loaded at this step.
 6. Keep `submit_leave_v2` and `submit_overtime_v2` locked before 2027-01-01. Never run `supabase/staging/uat_leave_bypass_only.sql` against production.
 7. Only **after** all of these changes are deployed: perform one combined UAT in a separate database/Worker, review OT print parity in Microsoft Excel, and obtain HR/IT sign-off before opening staff production.
 
-**Do not run 006, 007 or 008 separately after the combined release.** The three original files remain in GitHub for source transparency and troubleshooting, not as an additional install step.
+**Do not run 006, 007, 008 or 009 separately after the combined release.** The three original files remain in GitHub for source transparency and troubleshooting, not as an additional install step.
 
 **Rollback:** Record exact previous Edge/Cloudflare versions before deployment and retain an approved DB backup. The combined SQL adds new table/function/columns and expands a check constraint; do not blindly drop the new schema if transactions were recorded after the upgrade.
 
@@ -108,3 +108,13 @@ Use a **fresh separate Supabase project and separate Cloudflare Worker**, not a 
 - Exact equality of PDF/printed appearance is still dependent on the font availability, Excel version, printer drivers and Excel Save As conversion. Confirm using Excel's original Print Preview during combined UAT; do not claim verified 100% visual equivalence before that.
 
 - The Admin uploader now strips historical example shift entries and identifying values automatically before storing the workbook; employee data is added only during authorized download.
+
+## V1.7 parity completed in migration 009
+
+- Admin can toggle **OT Approver / Manager / Supervisor** on any employee. The staff **Instructed By** list includes active flagged employees, not just ADMIN accounts; staff must select one when submitting OT.
+- Duplicate Pending/Approved OT for one staff and date is prohibited via atomic server check and partial unique index. Resubmission after rejection/cancellation is allowed.
+- HR OT form export is **Admin-only**, selects **employee (including Resigned/Inactive)** and **cycle month (16th to 15th)**, and includes **APPROVED claims only**. Position is mandatory; no claim is silently omitted.
+- Output worksheet tab is renamed to the employee name (Excel-safe, maximum 31 characters). Certified By and signature blocks remain blank for manual HR approval, as per V1.6.2.
+- Admin can cancel Approved OT with mandatory reason and audit; Staff can cancel only Pending OT. Cancelled claims are excluded from future HR downloads.
+- The per-staff OT records list on Admin dashboard is limited, so export uses its own authenticated period query and does not truncate approved payroll items.
+- Older file `20261121_006_008_combined_release.sql` is superseded. The ONLY active production release file is `20261121_006_009_final_combined_release.sql`.
