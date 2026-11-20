@@ -313,10 +313,10 @@ function reports(){
   ['audit','Admin Activity & Audit','Administration actions and change history','shield-check']
  ];
  return '<div class="hero"><div><span class="eyebrow">ADMIN REPORTING</span><h2>Reports & Audit</h2>'+
-  '<p>Download an Excel-compatible CSV for operational reconciliation and management review. All data is requested securely from the server.</p></div></div>'+
+  '<p>Download native Excel XLSX reports for operational reconciliation and management review. All data is requested securely from the server.</p></div></div>'+
   '<div class="grid grid-3">'+items.map(([id,label,desc])=>
    '<div class="card"><h3>'+esc(label)+'</h3><p class="muted">'+esc(desc)+'</p>'+
-   '<button class="primary-btn" data-admin-report="'+id+'">Export CSV</button></div>').join('')+'</div>'+
+   '<button class="primary-btn" data-admin-report="'+id+'">Export Excel</button></div>').join('')+'</div>'+
   '<div class="soft-note" style="margin-top:20px">Only Admin can generate these reports. Audit records are not editable. CSV exports can be opened in Excel. Restrict report downloads to authorized management and store them securely.</div>';
 }
 async function exportAdminReport(report){
@@ -325,7 +325,7 @@ async function exportAdminReport(report){
   toast('Preparing '+report.toUpperCase()+' report…');
   const result=await call('adminReport',{report});
   if(!result.rows?.length)return toast('No records to export');
-  downloadTableCsv('SkyBar_'+report.toUpperCase()+'_'+myDate()+'.csv',result.columns,result.rows);
+  downloadTableXlsx('SkyBar_'+report.toUpperCase()+'_'+myDate()+'.xlsx',result.columns,result.rows);
   toast('Report downloaded: '+result.rows.length+' record(s)');
  }catch(e){toast(e.message,true)}
 }
@@ -368,10 +368,10 @@ function admin(){
     '<div class="card table-wrap">'+(leaveRows?
     '<table><thead><tr><th>Employee / Ref</th><th>Leave Dates</th><th>Type</th><th>Days</th><th>Status</th><th>Admin Action</th></tr></thead><tbody>'+leaveRows+'</tbody></table>':
     cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
-    '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT CSV</button></div>'+
+    '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT Excel</button></div>'+
     '<div class="card table-wrap">'+(adminOt.length?'<table><thead><tr><th>Staff</th><th>Date</th><th>Shift</th><th>OT Hours</th><th>Claim Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+otRows+'</tbody></table>':
       cardEmpty('No overtime submissions yet.'))+'</div>'+
-    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, print individual claims, or export all records to Excel-compatible CSV. Exact hotel HR OT template remains to be matched when its source is available.</div>';
+    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, print individual claims, or export all records to Excel XLSX. Exact hotel HR OT template remains to be matched when its source is available.</div>';
 }
 
 
@@ -496,14 +496,14 @@ function exportOT(){
  if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
  const data=state.overview.adminOt||[];
  if(!data.length)return toast('No OT records to export',true);
- downloadTableCsv('SkyBar_OT_'+myDate()+'.csv',
+ downloadTableXlsx('SkyBar_OT_'+myDate()+'.xlsx',
   ['Employee ID','Employee','OT Date','Shift Start','Shift End','Total Shift (hours)','OT Hours','Claim Type','Status','Reason','Admin Note'],
   data.map(r=>{const p=staffById(r.staff_id);return[
     p?.employee_id||'',r.employee_name||'',r.ot_date,r.shift_start,r.shift_end,
     (Number(r.total_shift_minutes)/60).toFixed(2),(Number(r.ot_minutes)/60).toFixed(2),
     r.claim_type,r.status,r.reason,r.admin_note||''
   ]}));
- toast('OT report exported (Excel-compatible CSV)');
+ toast('OT report exported as Excel XLSX');
 }
 function editLeaveType(requestId){
  if(state.preview)return toast('Preview is read-only',true);
