@@ -1,7 +1,7 @@
 /* SkyBar OT Excel generator: uses the original-layout, macro-free workbook template.
  * All assembly happens in the user's browser. No remote spreadsheet service.
  * Template is retrieved from the authenticated Supabase Edge API after Admin upload.
- * Template rebuilt from user-supplied legacy .xls; original VBA is intentionally excluded.
+ * Preserve every original workbook part/format/logo exactly as in Excel-saved .xlsx; only OT data cells change. VBA from legacy .xls is excluded.
  */
 (() => {
 'use strict';
@@ -24,28 +24,46 @@ const concat=chunks=>{
 };
 async function unpack(buf){
  const raw=new Uint8Array(buf),view=new DataView(buf),files=[];
- let pos=0;
- while(pos+30<=raw.length && uint32(view,pos)===0x04034b50){
-  const method=uint16(view,pos+8),flags=uint16(view,pos+6);
-  const compressedSize=uint32(view,pos+18);
-  const filenameLength=uint16(view,pos+26),extraLength=uint16(view,pos+28);
-  if(flags&8)throw Error('Unsupported OT template ZIP descriptor');
-  const start=pos+30+filenameLength+extraLength;
-  const end=start+compressedSize;
-  if(end>raw.length)throw Error('Truncated OT workbook');
-  const name=td.decode(raw.slice(pos+30,pos+30+filenameLength));
-  const bytes=raw.slice(start,end);
-  let content;
-  if(method===0)content=bytes;
-  else if(method===8){
-   if(typeof DecompressionStream==='undefined')throw Error('Browser requires ZIP decompression support');
-   const output=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-   content=new Uint8Array(await new Response(output).arrayBuffer());
-  } else throw Error('Unsupported OT workbook compression: '+method);
-  files.push({name,data:content});
-  pos=end;
+ let eocd=-1;
+ // The central directory is authoritative even when Excel uses ZIP data descriptors.
+ for(let i=raw.length-22;i>=Math.max(0,raw.length-65557);i--){
+  if(uint32(view,i)===0x06054b50){eocd=i;break}
  }
- if(!files.some(f=>f.name==='xl/worksheets/sheet1.xml'))throw Error('Original OT worksheet missing');
+ if(eocd<0)throw Error('Invalid Excel ZIP file');
+ const count=uint16(view,eocd+10),offset=uint32(view,eocd+16);
+ if(count>1000||offset>=raw.length)throw Error('Invalid Excel ZIP directory');
+ let pos=offset,total=0;
+ for(let i=0;i<count;i++){
+  if(pos+46>raw.length||uint32(view,pos)!==0x02014b50)throw Error('Invalid workbook ZIP entry');
+  const method=uint16(view,pos+10);
+  const csize=uint32(view,pos+20),usize=uint32(view,pos+24);
+  const namelen=uint16(view,pos+28),extlen=uint16(view,pos+30),comment=uint16(view,pos+32);
+  const localOffset=uint32(view,pos+42);
+  const name=td.decode(raw.slice(pos+46,pos+46+namelen));
+  pos+=46+namelen+extlen+comment;
+  if(!name||name.endsWith('/'))continue;
+  if(usize>10000000||(total+=usize)>30000000)throw Error('OT workbook exceeds safe size limit');
+  if(localOffset+30>raw.length||uint32(view,localOffset)!==0x04034b50)
+    throw Error('Invalid OT workbook data offset');
+  const localNameLength=uint16(view,localOffset+26);
+  const localExtraLength=uint16(view,localOffset+28);
+  const start=localOffset+30+localNameLength+localExtraLength;
+  const end=start+csize;
+  if(end>raw.length)throw Error('Truncated OT workbook');
+  const bytes=raw.slice(start,end);
+  let body;
+  if(method===0)body=bytes;
+  else if(method===8){
+   if(typeof DecompressionStream==='undefined')throw Error('Download requires modern Chrome or Edge');
+   try{
+    const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    body=new Uint8Array(await new Response(stream).arrayBuffer());
+   }catch{throw Error('Cannot unpack workbook. Save the original template as .xlsx using Excel.')}
+  }else throw Error('Unsupported workbook compression method '+method);
+  if(body.length!==usize)throw Error('Incomplete OT template content');
+  files.push({name,data:body});
+ }
+ if(!files.some(f=>f.name==='xl/worksheets/sheet1.xml'))throw Error('OT template must have its main sheet in sheet1.xml');
  return files;
 }
 function pack(files){
@@ -96,12 +114,21 @@ function plusNine(start){
 function getPeriod(dateText){
  const d=new Date(dateText+'T12:00:00');
  if(Number.isNaN(d.getTime()))throw Error('Invalid OT date');
- const from=new Date(d.getFullYear(),d.getMonth()-(d.getDate()<=10?1:0),11);
- const to=new Date(from.getFullYear(),from.getMonth()+1,10);
- return {from,to,dates:Array.from({length:31},(_,i)=>{
-  const day=new Date(from.getFullYear(),from.getMonth(),from.getDate()+i);
-  return day<=to?day:null
- }).filter(Boolean)};
+ // EXACT original HR form: 16th of first month to 15th of following month.
+ const from=new Date(d.getFullYear(),d.getMonth()-(d.getDate()<16?1:0),16);
+ const to=new Date(from.getFullYear(),from.getMonth()+1,15);
+ const nextMonth=new Date(from.getFullYear(),from.getMonth()+1,1);
+ return {from,to,nextMonth};
+}
+function excelDate(date){
+ return (Date.UTC(date.getFullYear(),date.getMonth(),date.getDate())-Date.UTC(1899,11,30))/86400000;
+}
+function originalTime(value){
+ const t=time(value);if(!t)return '';
+ const [h,m]=t.split(':').map(Number);
+ const suffix=h===0&&m===0?'mn':h<12?'am':'pm';
+ const hour=h%12||12;
+ return hour+'.'+String(m).padStart(2,'0')+suffix;
 }
 function updateSheet(xml,entries){
  const doc=new DOMParser().parseFromString(xml,'application/xml');
@@ -135,7 +162,7 @@ function updateSheet(xml,entries){
 }
 async function download({selected,records,employee,preparedBy,loadTemplate}){
  if(!selected?.ot_date)throw Error('OT record not found');
- const {from,to,dates}=getPeriod(selected.ot_date);
+ const {from,to,nextMonth}=getPeriod(selected.ot_date);
  const source=(records||[]).filter(r=>
   r.staff_id===selected.staff_id &&
   r.ot_date>=toISO(from)&&r.ot_date<=toISO(to)&&r.status!=='CANCELLED'
@@ -155,30 +182,52 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
  catch{throw Error('Corrupted HR OT template');}
  const files=await unpack(raw.buffer);
  const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
+ // Keep the original Excel sheet, logo, fonts, colors, borders, merge ranges,
+ // original HR wording, approval signatures and print settings unchanged.
+ // Only replace input cells that the HR form expects us to fill.
  const filled={
-  N6:'From * '+niceDate(from),S6:'To * '+niceDate(to),
+  N6:niceDate(from),S6:niceDate(to),
   C8:employee?.name||selected.employee_name||'',I8:employee?.position||'',
-  R8:preparedBy||'',C10:employee?.employee_id||'',I10:employee?.department||'SkyBar',
-  R10:niceDate(new Date()),
-  A15:from.toLocaleDateString('en-MY',{month:'short',year:'numeric'}),
-  A36:to.toLocaleDateString('en-MY',{month:'short',year:'numeric'})
+  R8:preparedBy||'',C10:employee?.employee_id||'',
+  I10:employee?.department||'SkyBar',R10:niceDate(new Date()),
+  A15:excelDate(from),A31:excelDate(nextMonth)
  };
- for(let i=0;i<31;i++){
-  const rn=15+i,date=dates[i];
-  if(!date)continue;
-  const key=toISO(date),row=byDay.get(key);
-  filled['B'+rn]=date.getDate();
-  if(!row)continue;
-  filled['C'+rn]=time(row.shift_start);
-  filled['D'+rn]=time(row.shift_end);
-  filled['E'+rn]=plusNine(row.shift_start);
-  filled['F'+rn]=time(row.shift_end);
+ const otColumns=['C','D','E','F','G','H','I','K','L','M','N','P','R','S','U'];
+ // Remove sample/manual entries in the approved master, not formatting.
+ for(let rn=15;rn<=45;rn++){
+  filled['B'+rn]='';
+  for(const col of otColumns)filled[col+rn]='';
+ }
+ // Source form fixes rows 15-30 to day 16-31 of first month and
+ // rows 31-45 to day 01-15 of next month. Blank unused days to retain
+ // EVERY original merge range and row height for short months.
+ const firstMonthLast=new Date(from.getFullYear(),from.getMonth()+1,0).getDate();
+ for(let day=16;day<=firstMonthLast;day++){
+  const date=new Date(from.getFullYear(),from.getMonth(),day);
+  const rn=15+(day-16);
+  filled['B'+rn]=day;
+  const row=byDay.get(toISO(date));
+  if(row)fillRow(rn,row);
+ }
+ for(let day=1;day<=15;day++){
+  const date=new Date(nextMonth.getFullYear(),nextMonth.getMonth(),day);
+  const rn=30+day;
+  filled['B'+rn]=day;
+  const row=byDay.get(toISO(date));
+  if(row)fillRow(rn,row);
+ }
+ function fillRow(rn,row){
+  const standardEnd=plusNine(row.shift_start);
+  filled['C'+rn]=originalTime(row.shift_start);
+  filled['D'+rn]=originalTime(standardEnd);
+  filled['E'+rn]=originalTime(standardEnd);
+  filled['F'+rn]=originalTime(row.shift_end);
   const hours=Math.round(Number(row.ot_minutes||0)/60*100)/100;
   const claim=String(row.claim_type||'').toUpperCase();
   if(claim==='OFF'){filled['H'+rn]=hours;filled['R'+rn]=1}
   else if(claim==='PH'){filled['I'+rn]=hours;filled['S'+rn]=1}
   else filled['G'+rn]=hours;
-  // No night-shift, split-shift or certification values are fabricated.
+  // Split shift / night shift / Certified By remain blank if not recorded.
  }
  sheet.data=te.encode(updateSheet(td.decode(sheet.data),filled));
  const result=pack(files),url=URL.createObjectURL(result);
