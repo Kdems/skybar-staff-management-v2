@@ -319,6 +319,35 @@ function admin(){
     cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
     title('Remaining Migration')+'<div class="card"><p class="muted">Overtime approval, HR export and reports are being completed before full UAT.</p></div>';
 }
+function editLeaveType(requestId){
+ if(state.preview)return toast('Preview is read-only',true);
+ if(state.user?.role!=='ADMIN')return toast('Admin access only',true);
+ const r=(state.overview?.adminLeaves||[]).find(x=>x.id===requestId);
+ if(!r)return toast('Leave request not found',true);
+ if(!['PENDING','APPROVED'].includes(r.status))return toast('Only active requests can be edited',true);
+ const options=['AL','PH','EL','OFF'].map(t=>'<option value="'+t+'" '+(r.leave_type===t?'selected':'')+'>'+esc(types[t])+'</option>').join('');
+ const html='<div class="soft-note">Employee: <b>'+esc(r.employee_name)+'</b> · '+esc(r.request_code||'')+
+ '<div>Leave dates: '+fmt(r.start_date)+' – '+fmt(r.end_date)+' · '+num(r.units)+' day(s) · '+esc(r.status)+'</div></div>'+
+ '<div class="field"><label for="adminLeaveType">Correct leave type</label><select id="adminLeaveType">'+options+'</select></div>'+
+ '<div class="field"><label for="leaveAdminReason">Reason for Admin correction (required)</label>'+
+ '<textarea id="leaveAdminReason" maxlength="500" placeholder="Reason for changing leave classification"></textarea></div>'+
+ '<div class="soft-note">AL uses available AL days; PH uses oldest eligible credits; Off Day (OFF) uses neither. Approval status and calendar slot are preserved. Staff cannot select OFF.</div>';
+ customForm('Admin · Edit Leave Type',html,'Review Change',async()=>{
+   const leaveType=$('adminLeaveType').value, note=$('leaveAdminReason').value.trim();
+   if(leaveType===r.leave_type)throw Error('Choose a different leave type');
+   if(note.length<3)throw Error('Enter admin reason (at least 3 characters)');
+   modal('Confirm Leave Reclassification',
+    r.employee_name+': '+types[r.leave_type]+' → '+types[leaveType]+'. AL/PH credits will be recalculated and '+r.status+' status kept. Reason: '+note,
+    [{text:'Back',action:()=>editLeaveType(requestId)},
+     {text:'Confirm Change',primary:true,action:async()=>{
+      try{
+       const result=await call('adminChangeLeaveType',{requestId,leaveType,note});
+       await reload();
+       toast('Leave type updated: '+result.previousType+' → '+result.newType);
+      }catch(e){toast(e.message,true)}
+     }}]);
+ });
+}
 function staffById(id){return(state.overview?.employees||[]).find(p=>p.id===id)}
 function formField(label,id,value='',extra='',type='text'){
   return '<div class="field"><label for="'+esc(id)+'">'+esc(label)+'</label><input id="'+esc(id)+'" type="'+type+'" value="'+esc(value)+'" '+extra+'></div>';
@@ -437,6 +466,7 @@ $('addPHBtn')?.addEventListener('click',()=>editPH());
 document.querySelectorAll('[data-edit-al]').forEach(x=>x.onclick=()=>editAL(x.dataset.editAl));
 document.querySelectorAll('[data-edit-ph]').forEach(x=>x.onclick=()=>editPH(x.dataset.editPh));
 document.querySelectorAll('[data-toggle-ph]').forEach(x=>x.onclick=()=>togglePH(x.dataset.togglePh));
+document.querySelectorAll('[data-edit-leave-type]').forEach(x=>x.onclick=()=>editLeaveType(x.dataset.editLeaveType));
 $('addStaffBtn')?.addEventListener('click',()=>editStaff());
 document.querySelectorAll('[data-edit-staff]').forEach(x=>x.onclick=()=>editStaff(x.dataset.editStaff));
 document.querySelectorAll('[data-staff-status]').forEach(x=>x.onclick=()=>changeStaffStatus(x.dataset.staffStatus));
