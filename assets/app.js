@@ -43,6 +43,121 @@ function phStatus(credit){
  if(credit.release_mode==='AUTO_DATE' && credit.holiday_date>myDate())return 'LOCKED';
  return 'RELEASED';
 }
+
+function bulkStaff(){
+ return (state.overview?.employees||[]).filter(p=>p.active&&p.role==='STAFF');
+}
+function parseHolidaySchedule(raw,year){
+ const lines=String(raw||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+ if(lines.length<1||lines.length>40)throw Error('Enter between 1 and 40 PH holidays');
+ const seen=new Set();
+ return lines.map((line,i)=>{
+  const p=(line.includes('\t')?line.split('\t'):line.split('|')).map(x=>x.trim());
+  if(p.length!==3)throw Error('Line '+(i+1)+': use YYYY-MM-DD | Holiday Name | Days');
+  const [date,name,amount]=p;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number(date.slice(0,4))!==Number(year))
+   throw Error('Line '+(i+1)+': date must match selected year');
+  const d=new Date(date+'T12:00:00');
+  if(Number.isNaN(d.valueOf())||isoDay(d)!==date)
+   throw Error('Line '+(i+1)+': invalid calendar date');
+  const units=Number(amount);
+  if(name.length<2||name.length>160||!Number.isFinite(units)||units<0.5||units>3||units*2!==Math.trunc(units*2))
+   throw Error('Line '+(i+1)+': name required and days must be 0.5 to 3');
+  const k=date+'|'+name.toLowerCase();
+  if(seen.has(k))throw Error('Line '+(i+1)+': duplicate PH in the same list');
+  seen.add(k);
+  return {date,name,units};
+ });
+}
+function openBulkPHDraft(saved=null){
+ if(state.preview)return toast('Preview is read-only',true);
+ const people=bulkStaff();
+ if(!people.length)return toast('No active staff accounts to allocate PH',true);
+ const checked=new Set(saved?.staffIds||people.map(p=>p.id));
+ const year=Number(saved?.year||2027);
+ const checkedHtml=people.map(p=>'<label class="bulk-staff-item"><input class="bulk-staff-check" type="checkbox" value="'+esc(p.id)+'" '+(checked.has(p.id)?'checked':'')+'><span><b>'+esc(p.name)+'</b><small>'+esc(p.employee_id)+' · '+esc(p.position||'Staff')+'</small></span></label>').join('');
+ const yearOptions=[2025,2026,2027,2028,2029].map(y=>'<option value="'+y+'" '+(year===y?'selected':'')+'>'+y+'</option>').join('');
+ const html='<div class="bulk-dialog"><p class="muted">Select staff once, paste the PH schedule, and allocate every holiday to every selected staff in one transaction. Matching existing credits will be skipped.</p>'+
+ '<div class="field"><label for="bulkYear">Public holiday source year</label><select id="bulkYear">'+yearOptions+'</select></div>'+
+ '<div class="section-bar"><div><h3>Staff to receive credits</h3><p>Active STAFF accounts only · '+people.length+' available</p></div><div class="staff-actions"><button class="ghost-btn" type="button" id="bulkAll">Select All</button><button class="ghost-btn" type="button" id="bulkNone">Clear</button></div></div>'+
+ '<div class="bulk-staff-grid">'+checkedHtml+'</div>'+
+ '<div class="field"><label for="bulkPHRows">PH schedule — one holiday per line</label>'+
+ '<textarea id="bulkPHRows" rows="7" spellcheck="false" placeholder="YYYY-MM-DD | Holiday Name | Days\n2027-XX-XX | Holiday name | 1">'+esc(saved?.lines||'')+'</textarea>'+
+ '<p class="muted" style="font-size:.76rem">Use actual hotel-approved holiday dates. Copy from Excel as 3 tab-separated columns, or use the | separator. Format: Date | Name | Days. Maximum 40 rows per batch.</p></div>'+
+ '<div class="soft-note">Future dated PH remains LOCKED until its holiday date. This operation does not change staff PIN, AL, previous PH usage or leave history.</div></div>';
+ customForm('Bulk PH — One Schedule, All Staff',html,'Review Bulk Allocation',async()=>{
+  const staffIds=[...document.querySelectorAll('.bulk-staff-check:checked')].map(n=>n.value);
+  const year=Number($('bulkYear').value);
+  const lines=$('bulkPHRows').value;
+  if(!staffIds.length)throw Error('Select at least one staff');
+  const holidays=parseHolidaySchedule(lines,year);
+  const draft={year,staffIds,lines};
+  const count=staffIds.length*holidays.length;
+  modal('Confirm PH Batch Allocation',
+   'Apply '+holidays.length+' holidays to '+staffIds.length+' staff ('+count+' credit records maximum)? Existing matching holidays will be skipped, so repeat submissions do not double-credit.',
+   [{text:'Edit selection',action:()=>openBulkPHDraft(draft)},
+    {text:'Apply '+count+' Credits',primary:true,action:async()=>{
+     try{
+      const result=await call('adminBulkPH',{batch:{year,staffIds,holidays}});
+      await reload();
+      modal('Bulk PH Complete',
+       'Created '+result.created+' credits, skipped '+result.skipped+' existing credits across '+result.staffCount+' staff. Future credits stay locked until their date.',
+       [{text:'Done',primary:true}]);
+     }catch(e){toast(e.message,true)}
+    }}]);
+ });
+ $('bulkAll').onclick=()=>document.querySelectorAll('.bulk-staff-check').forEach(n=>n.checked=true);
+ $('bulkNone').onclick=()=>document.querySelectorAll('.bulk-staff-check').forEach(n=>n.checked=false);
+}
+function openingBalanceYear(year){
+ const people=bulkStaff(), credits=state.overview.phCredits||[];
+ return people.map(p=>{
+  const records=credits.filter(c=>c.staff_id===p.id&&Number(c.source_year)===year);
+  const opening=records.find(c=>c.bulk_key==='OPENING:'+year || (c.holiday_name==='Opening PH Balance '+year&&c.release_mode==='MANUAL'));
+  const other=records.filter(c=>c.active&&c.id!==opening?.id).reduce((n,c)=>n+Math.max(0,Number(c.units)-Number(c.reservedUnits||0)),0);
+  return {p,opening:opening?.active?Number(opening.units):0,other};
+ });
+}
+function openingBalanceMarkup(year,preset={}){
+ return '<div class="bulk-dialog">'+
+ '<p class="muted">Enter the <b>additional approved outstanding PH balance</b> for each staff in '+year+'. It is recorded as a separate historical credit. Existing individual PH credits are shown so you can avoid double counting.</p>'+
+ '<div class="field"><label for="openingYear">Source year</label><select id="openingYear">'+
+ [2025,2026].map(y=>'<option value="'+y+'" '+(year===y?'selected':'')+'>'+y+'</option>').join('')+'</select></div>'+
+ '<div class="table-wrap"><table class="bulk-ledger"><thead><tr><th>Staff</th><th>Other PH already credited</th><th>Additional PH balance (days)</th></tr></thead><tbody>'+
+ openingBalanceYear(year).map(({p,opening,other})=>
+ '<tr><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.employee_id)+'</div></td>'+
+ '<td>'+num(other)+' day(s)</td><td><input type="number" data-opening-staff="'+esc(p.id)+'" min="0" max="30" step="0.5" required value="'+esc(preset[p.id]??opening)+'" aria-label="Historical PH balance for '+esc(p.name)+'"></td></tr>').join('')+
+ '</tbody></table></div>'+
+ '<div class="soft-note" style="margin-top:12px">Existing opening balances are prefilled. Saving again updates them instead of adding duplicates. Zero deactivates an unused opening credit; used credits cannot be zeroed. For current-year earned PH, the ledger stores the recording date as the as-of date, not as an official holiday.</div></div>';
+}
+function openHistoricalBulk(year=2025,preset={}){
+ if(state.preview)return toast('Preview is read-only',true);
+ if(!bulkStaff().length)return toast('No active staff accounts',true);
+ customForm('Bulk Historical PH Balances',openingBalanceMarkup(year,preset),'Review Historical Balances',async()=>{
+  const chosen=Number($('openingYear').value);
+  const balances=[...document.querySelectorAll('[data-opening-staff]')].map(el=>({staffId:el.dataset.openingStaff,units:Number(el.value)}));
+  if(balances.some(b=>!Number.isFinite(b.units)||b.units<0||b.units>30||b.units*2!==Math.trunc(b.units*2)))
+   throw Error('Balances must be 0–30 in 0.5-day increments');
+  const snapshot=Object.fromEntries(balances.map(b=>[b.staffId,b.units]));
+  modal('Confirm Historical PH Balances',
+   'Save '+chosen+' opening PH credits for '+balances.length+' staff in one transaction? Existing individual credits are NOT removed or deducted from these entered amounts.',
+   [{text:'Edit balances',action:()=>openHistoricalBulk(chosen,snapshot)},
+    {text:'Save All '+balances.length+' Staff',primary:true,action:async()=>{
+      try{
+       const result=await call('adminBulkHistoricalPH',{batch:{year:chosen,balances}});
+       await reload();
+       modal('Historical PH Saved',
+         'Created '+result.created+', updated '+result.updated+', deactivated '+result.deactivated+' and skipped '+result.skipped+' staff opening records.',
+         [{text:'Done',primary:true}]);
+      }catch(e){toast(e.message,true)}
+    }}]);
+ });
+ $('openingYear').onchange=()=>{
+  const selected=Number($('openingYear').value);
+  $('modalContent').innerHTML=openingBalanceMarkup(selected);
+  $('openingYear').onchange=()=>openHistoricalBulk(Number($('openingYear').value));
+ };
+}
 function balances(){
  if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
  const people=state.overview.employees||[];
