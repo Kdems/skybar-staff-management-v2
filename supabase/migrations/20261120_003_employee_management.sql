@@ -2,7 +2,8 @@
 -- Supports registration, profile edits (including Staff ID), resignation/reactivation,
 -- resetting PINs, and deletion only when an account has no operational history.
 ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS employment_status text DEFAULT 'ACTIVE';
-UPDATE public.staff SET employment_status=CASE WHEN active THEN 'ACTIVE' ELSE 'INACTIVE' END WHERE employment_status IS NULL;
+UPDATE public.staff SET employment_status='INACTIVE' WHERE active=false AND employment_status='ACTIVE';
+UPDATE public.staff SET employment_status='ACTIVE' WHERE employment_status IS NULL;
 ALTER TABLE public.staff ALTER COLUMN employment_status SET NOT NULL;
 DO $block$
 BEGIN
