@@ -123,6 +123,7 @@ function openingBalanceMarkup(year,preset={}){
  '<p class="muted">Enter the <b>additional approved outstanding PH balance</b> for each staff in '+year+'. It is recorded as a separate historical credit. Existing individual PH credits are shown so you can avoid double counting.</p>'+
  '<div class="field"><label for="openingYear">Source year</label><select id="openingYear">'+
  [2025,2026].map(y=>'<option value="'+y+'" '+(year===y?'selected':'')+'>'+y+'</option>').join('')+'</select></div>'+
+ '<div class="bulk-fill"><div class="field"><label for="openingFillValue">Same PH balance for all staff (optional)</label><input id="openingFillValue" type="number" min="0" max="30" step="0.5" placeholder="e.g. 2"></div><button class="ghost-btn" id="openingFillAll" type="button">Apply to All Staff</button></div>'+
  '<div class="table-wrap"><table class="bulk-ledger"><thead><tr><th>Staff</th><th>Other PH already credited</th><th>Additional PH balance (days)</th></tr></thead><tbody>'+
  openingBalanceYear(year).map(({p,opening,other})=>
  '<tr><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.employee_id)+'</div></td>'+
@@ -152,6 +153,15 @@ function openHistoricalBulk(year=2025,preset={}){
       }catch(e){toast(e.message,true)}
     }}]);
  });
+ $('openingFillAll').onclick=()=>{
+  const el=$('openingFillValue');
+  if(!el.value.trim())return toast('Enter PH days before applying to all staff',true);
+  const value=Number(el.value);
+  if(!Number.isFinite(value)||value<0||value>30||value*2!==Math.trunc(value*2))
+   return toast('Use whole or half-day values (0–30)',true);
+  document.querySelectorAll('[data-opening-staff]').forEach(input=>input.value=String(value));
+  toast('Applied '+value+' day(s) to all rows. Review before saving.');
+ };
  $('openingYear').onchange=()=>openHistoricalBulk(Number($('openingYear').value));
 }
 function balances(){
