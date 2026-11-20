@@ -36,6 +36,45 @@ function calculateOt(start,end){if(!start||!end)return null;const [sh,sm]=start.
 function overtime(){return title('Overtime submission')+'<div class="card"><form id="otForm"><div class="form-grid"><div class="field"><label>Staff name</label><input disabled value="'+esc(state.user.name)+'"></div><div class="field"><label for="otDate">OT date</label><input type="date" id="otDate" value="'+myDate()+'" required></div><div class="field"><label for="shiftStart">Current Shift — Start</label><input type="time" id="shiftStart" required></div><div class="field"><label for="shiftEnd">Shift End</label><input type="time" id="shiftEnd" required></div><div class="field"><label>Claim Type</label><select id="claimType"><option value="NORMAL">Normal Working Day · x1.5</option><option value="OFF">Off / Rest Day · x2.0</option><option value="PH">Compulsory PH · x3.0</option></select></div><div class="field"><label for="otApprover">Instructed by</label><select id="otApprover"><option value="">Select manager / supervisor</option>'+((state.overview.approvers||[]).map(a=>'<option value="'+esc(a.employee_id)+'">'+esc(a.name)+'</option>').join(''))+'</select></div><div class="field full"><label for="otReason">Reason for overtime</label><textarea id="otReason" placeholder="Describe the work completed" required maxlength="500"></textarea></div></div><div id="otCalc" class="soft-note">Enter shift start and shift end to calculate OT automatically. Normal shift = 9 hours.</div><div class="form-actions"><button type="submit" class="primary-btn" '+(state.preview?'disabled':'')+'>Submit Overtime ↗</button></div></form></div>'}
 function history(){const items=(state.overview.requests||[]);const ots=(state.overview.ot||[]);return title('Leave requests')+'<div class="card table-wrap">'+(items.length?'<table><thead><tr><th>Date</th><th>Type</th><th>Units</th><th>Status</th><th>Action</th></tr></thead><tbody>'+items.map(r=>'<tr><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+num(r.units)+'</td><td>'+status(r.status)+'</td><td>'+(r.status==='PENDING'?'<button class="ghost-btn" data-cancel="'+esc(r.id)+'">Cancel</button>':'—')+'</td></tr>').join('')+'</tbody></table>':cardEmpty('No leave requests yet.'))+'</div>'+title('Overtime submissions')+'<div class="card table-wrap">'+(ots.length?'<table><thead><tr><th>Date</th><th>Shift</th><th>OT hours</th><th>Status</th></tr></thead><tbody>'+ots.map(r=>'<tr><td>'+fmt(r.ot_date)+'</td><td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+'</td><td>'+num(r.ot_minutes/60)+'</td><td>'+status(r.status)+'</td></tr>').join('')+'</tbody></table>':cardEmpty('No overtime submissions yet.'))+'</div>'}
 
+
+const commonPH = ['Federal Territory Day','Chinese New Year','Nuzul Al-Quran','Hari Raya Aidilfitri','Labour Day','Wesak Day','Hari Raya Aidiladha','Agong Birthday','Awal Muharram','National Day','Malaysia Day','Maulidur Rasul','Deepavali','Christmas Day','Additional PH'];
+function phStatus(credit){
+ if(!credit.active)return 'INACTIVE';
+ if(credit.release_mode==='AUTO_DATE' && credit.holiday_date>myDate())return 'LOCKED';
+ return 'RELEASED';
+}
+function balances(){
+ if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
+ const people=state.overview.employees||[];
+ const allocations=state.overview.alAllocations||[];
+ const credits=state.overview.phCredits||[];
+ const year=state.alYear, now=myDate();
+ const count=allocations.filter(a=>Number(a.source_year)===year).length;
+ const locked=credits.filter(p=>p.active&&p.release_mode==='AUTO_DATE'&&p.holiday_date>now).reduce((n,p)=>n+Number(p.units),0);
+ const released=credits.filter(p=>p.active&&(p.release_mode==='MANUAL'||p.holiday_date<=now)).reduce((n,p)=>n+Number(p.units)-(Number(p.reservedUnits)||0),0);
+ const yearOptions=[2025,2026,2027,2028,2029].map(y=>'<option value="'+y+'" '+(y===year?'selected':'')+'>'+y+'</option>').join('');
+ const alRows=people.map(p=>{
+  const a=allocations.find(v=>v.staff_id===p.id&&Number(v.source_year)===year);
+  const total=Number(a?.entitlement||0)+Number(a?.carry_forward||0)+Number(a?.adjustment||0);
+  return '<tr><td><b>'+esc(p.employee_id)+'</b></td><td>'+esc(p.name)+'</td><td>'+num(a?.entitlement)+'</td><td>'+num(a?.carry_forward)+'</td><td>'+num(a?.adjustment)+'</td><td><b>'+num(total)+'</b></td><td><button class="ghost-btn" data-edit-al="'+esc(p.id)+'">'+(a?'Edit':'Set AL')+'</button></td></tr>';
+ }).join('');
+ const phRows=credits.filter(p=>(state.phYear==='ALL'||String(p.source_year)===state.phYear)&&(state.phStaff==='ALL'||p.staff_id===state.phStaff));
+ const names=new Map(people.map(p=>[p.id,p]));
+ const phTable=phRows.map(p=>{
+  const employee=names.get(p.staff_id);
+  return '<tr><td><b>'+esc(employee?.name||'Unknown')+'</b><div class="muted">'+esc(employee?.employee_id||'')+'</div></td><td>'+esc(p.source_year)+'</td><td>'+esc(p.holiday_name)+'</td><td>'+esc(p.holiday_date?fmt(p.holiday_date):'Historical')+'</td><td>'+num(p.units)+'</td><td>'+num(p.reservedUnits||0)+'</td><td>'+status(phStatus(p))+'</td><td><div class="staff-actions"><button class="ghost-btn" data-edit-ph="'+esc(p.id)+'">Edit</button><button class="ghost-btn" data-toggle-ph="'+esc(p.id)+'">'+(p.active?'Deactivate':'Reactivate')+'</button></div></td></tr>';
+ }).join('');
+ const phYearOptions=['ALL','2025','2026','2027','2028','2029'].map(y=>'<option value="'+y+'" '+(state.phYear===y?'selected':'')+'>'+(y==='ALL'?'All years':y)+'</option>').join('');
+ const phStaffOptions='<option value="ALL">All staff</option>'+people.map(p=>'<option value="'+esc(p.id)+'" '+(state.phStaff===p.id?'selected':'')+'>'+esc(p.name)+' ('+esc(p.employee_id)+')</option>').join('');
+ return '<div class="hero"><div><span class="eyebrow">ADMIN CONTROL</span><h2>Annual Leave & Public Holiday</h2><p>Prepare 2027 entitlements, record historical 2025–2026 PH, and schedule future PH credits with automatic unlock dates.</p></div></div>'+
+  '<div class="grid grid-3">'+metric('AL Allocated ('+year+')',count,people.length+' staff accounts')+metric('Released PH',num(Math.max(0,released)),'Available units, across staff')+metric('Locked Future PH',num(locked),'Awaiting holiday dates')+'</div>'+
+  '<div class="section-bar"><div><h2>Annual Leave Allocation</h2><p>Each year is separate. Carry-forward into 2027 belongs in the 2027 row.</p></div><select id="alYearSelector" class="toolbar-select">'+yearOptions+'</select></div>'+
+  '<div class="card table-wrap"><table><thead><tr><th>ID</th><th>Employee</th><th>Entitlement</th><th>Carry-forward</th><th>Adjustment</th><th>Total Days</th><th>Action</th></tr></thead><tbody>'+(alRows||'<tr><td colspan="7">No employees.</td></tr>')+'</tbody></table></div>'+
+  '<div class="section-bar"><div><h2>Public Holiday Credit Ledger</h2><p>2025 historical PH may be entered as earned. Future PH remains locked until its date.</p></div><button class="primary-btn" id="addPHBtn">+ Add PH Credit</button></div>'+
+  '<div class="filter-bar"><select id="phYearSelector" class="toolbar-select">'+phYearOptions+'</select><select id="phStaffSelector" class="toolbar-select">'+phStaffOptions+'</select></div>'+
+  '<div class="card table-wrap">'+(phRows.length?'<table><thead><tr><th>Staff</th><th>Year</th><th>Holiday</th><th>Holiday Date</th><th>Credit</th><th>Reserved</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+phTable+'</tbody></table>':cardEmpty('No PH credits for these filters.'))+'</div>'+
+  '<div class="soft-note" style="margin-top:16px">Admin can prepare credits now. Live leave submissions stay locked until 1 January 2027; PH is consumed oldest-first.</div>';
+}
 function admin(){
   if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
   const people=state.overview.employees||[];
