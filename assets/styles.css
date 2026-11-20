@@ -8,3 +8,7 @@
 /* Employee management V2 */
 .staff-actions{display:flex;gap:6px;flex-wrap:wrap}.staff-actions .ghost-btn{padding:7px 9px;font-size:.72rem}.danger-text{color:#ffb5bc!important;border-color:#8c4555!important}.staff-actions button:hover{filter:brightness(1.12)}.pin-button{padding:8px 11px;font-size:.75rem}
 @media(max-width:520px){.pin-button{padding:7px 8px;font-size:.68rem}.staff-actions{min-width:180px}}
+
+/* AL/PH Management toolbar */
+.filter-bar{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0 15px}.toolbar-select{border:1px solid #415774;border-radius:10px;padding:10px 12px;background:#122742;color:#f2f6fc;font-size:.81rem;max-width:100%;min-width:150px}.toolbar-select:focus{outline:2px solid #edc54c;outline-offset:2px}
+@media(max-width:760px){.filter-bar{flex-direction:column}.toolbar-select{max-width:100%}.section-bar{flex-wrap:wrap}}
