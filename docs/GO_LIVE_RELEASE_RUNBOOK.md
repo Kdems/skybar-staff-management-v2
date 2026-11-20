@@ -29,6 +29,7 @@ Three schema migrations are required on top of previously applied migrations 001
 1. Back up the current database before any schema changes (Supabase backups or managed SQL export).
 2. SQL Editor: run \`supabase/migrations/20261121_006_admin_leave_edit_offday.sql\`.
 3. SQL Editor: run \`supabase/migrations/20261121_007_overtime_approval.sql\`.
+4. SQL Editor: run \`supabase/migrations/20261121_008_ot_form_template.sql\`.
 5. Edge Functions → \`staff-api\` → replace with **latest** \`supabase/functions/staff-api/index.ts\`, then deploy ONCE.
 6. Cloudflare Git build: confirm deployment of GitHub \`main\` to existing Worker \`skybar-staff-management-v2\` and that \`.assetsignore\` prevents migrations, API code and docs from becoming public website assets.
 7. **Never switch Verify JWT to ON**, unless replacing the current custom Employee ID+PIN session system with a Supabase Auth JWT workflow. The current app validates sessions server-side.
