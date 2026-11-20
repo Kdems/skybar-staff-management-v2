@@ -36,3 +36,6 @@
 /* Scoped historical PH allocation: explicit staff selection */
 .bulk-ledger .opening-select{width:18px;height:18px;accent-color:var(--gold);cursor:pointer}
 .bulk-ledger th:first-child,.bulk-ledger td:first-child{width:62px;min-width:62px;text-align:center}
+
+/* STAGING BRANCH ONLY */
+.uat-banner{position:relative;z-index:500;background:#6a280d;color:#fff3dd;text-align:center;padding:10px 18px;font-size:13px;font-weight:800;letter-spacing:.06em;border-bottom:2px solid #f7ba60}
