@@ -1,0 +1,2 @@
+[functions.staff-api]
+verify_jwt = false
