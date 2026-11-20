@@ -399,20 +399,24 @@ function uploadOTTemplate(){
 }
 async function printOT(id,admin=false){
  if(state.preview)return toast('Preview is read-only',true);
- const all=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
- const selected=all.find(r=>r.id===id);
+ const list=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
+ const selected=list.find(r=>r.id===id);
  if(!selected)return toast('OT request not found',true);
- const employee=admin?staffById(selected.staff_id):state.user;
- if(!employee)return toast('Employee profile not found',true);
+ if(!['PENDING','APPROVED'].includes(selected.status))return toast('Only pending or approved OT may be exported to the HR form',true);
  try{
-  if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT form exporter is not loaded');
-  toast('Preparing original-layout OT Excel form…');
-  const result=await window.SKYBAR_OT_FORM_GENERATOR.download({
-    selected,records:all,employee,preparedBy:state.user.name,
-    loadTemplate:()=>call('getOTTemplate')
+  if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT form exporter is unavailable');
+  toast('Preparing original HR OT form…');
+  const period=await call('getOTPeriod',{
+   date:selected.ot_date,
+   ...(admin?{staffId:selected.staff_id}:{})
   });
-  toast('OT form ready: '+result.count+' claim(s) · '+result.periodStart+' to '+result.periodEnd);
- }catch(e){toast(e?.message||'Failed to create OT form',true)}
+  const result=await window.SKYBAR_OT_FORM_GENERATOR.download({
+   selected:{...selected,staff_id:period.employee.id},
+   records:period.records,employee:period.employee,
+   preparedBy:state.user.name,loadTemplate:()=>call('getOTTemplate')
+  });
+  toast('OT form downloaded for '+result.periodStart+' to '+result.periodEnd);
+ }catch(e){toast(e?.message||'Unable to prepare OT form',true)}
 }
 function otStatusAction(id,decision){
  if(state.preview||state.user?.role!=='ADMIN')return toast('Admin access only',true);
