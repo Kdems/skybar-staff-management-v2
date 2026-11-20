@@ -25,6 +25,31 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 
 **Security notes:** The frontend contains no service role key, password or real staff records. All database access goes through an Edge Function. The browser only holds a short-lived opaque session token (sessionStorage). Database RLS is enabled, with no policies for public access. Admin and server security need a full penetration review before launch.
 
+## Bulk PH Allocation — Migration 005
+
+**Problem solved:** do not create 13 individual credit entries for every public holiday.
+
+### Two administrator workflows
+
+1. **Bulk yearly PH schedule** — Admin selects all active staff (or a subset) and pastes the whole year's holiday schedule. Each line uses `YYYY-MM-DD | Holiday Name | Days`; Excel three-column tab-separated paste also works. One confirmation allocates all scheduled holidays to all selected staff. Each credit unlocks on its actual date. Repeating the same schedule skips matching records instead of doubling credit.
+2. **Historical PH opening balances** — Admin chooses 2025 or 2026, enters one outstanding opening balance per active staff in a single table, and saves once. Existing opening balances are updated, not duplicated. The table shows other PH credits already allocated for the year, so the administrator can avoid counting them a second time. `0` disables an unused opening credit; credits with usage history cannot be zeroed.
+
+### Install order (the GitHub commits do not deploy Supabase automatically)
+
+1. Supabase SQL Editor → run `supabase/migrations/20261120_005_bulk_ph.sql` **after 001–004**. This adds a nullable `bulk_key` to `ph_credits` and two authenticated, admin-only RPCs.
+2. Supabase Edge Functions → `staff-api` → replace its code with the latest `supabase/functions/staff-api/index.ts` from this repo, then **Deploy updates**. Do not change the working `Verify JWT=OFF` setting.
+3. Open Cloudflare: `https://skybar-staff-management-v2.texas-boiler.workers.dev/` and hard refresh.
+4. Login ADMIN001 → AL & PH Management → **Allocate Annual PH Schedule** or **Historical PH Balances 2025 / 2026**.
+5. Test with dummy employees only. To test idempotency, apply an identical schedule twice and confirm the second run reports `created=0` and `skipped=N`. Check the PH ledger for no duplicate records.
+
+### Important rules
+
+- PH must be earned before being available. Bulk schedule credits remain `LOCKED` until the specified holiday date (Malaysia time). The system does **not** guess holiday dates, replacement days or the hotel's official eligibility calendar.
+- The historical balance grid is for **additional approved outstanding credit**, not a second copy of individual PH entries already added earlier; those credits are shown separately.
+- 2026 opening balances added during 2026 are recorded as an **as-of date** (not an actual public holiday), and may include only PH already earned and approved.
+- All batch changes are atomic, staff are limited to active STAFF accounts, actions are audited and 2027 live leave submissions remain locked until 2027-01-01.
+- Test thoroughly before adding real staff data.
+
 ## AL & PH Management (next setup step)
 
 1. In **Supabase SQL Editor**, run `supabase/migrations/20261120_004_al_ph_management.sql`. This updates the AL leave calculation and adds role-protected AL/PH administration RPCs. Existing employees, login and leave tables stay in place.
