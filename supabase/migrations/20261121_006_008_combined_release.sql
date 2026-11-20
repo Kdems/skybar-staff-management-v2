@@ -1,3 +1,5 @@
+-- SUPERSEDED: DO NOT RUN THIS OLDER 006–008 PACKAGE.
+-- USE 20261121_006_009_final_combined_release.sql INSTEAD.
 -- SKYBAR STAFF MANAGEMENT V2 — COMBINED RELEASE 006–008
 -- One SQL Editor execution, ONE transaction; run only after backup and migrations 001–005.
 -- Includes Admin Leave OFF correction, OT approval, and private HR OT template.
