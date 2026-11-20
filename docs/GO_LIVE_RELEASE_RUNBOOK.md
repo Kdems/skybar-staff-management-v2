@@ -21,21 +21,21 @@
 | Automated backups | **Not configured by source code** | Check Supabase plan backups and establish protected recovery exports |
 | Security audit / release operations | Engineering checklist below | Execute with authorized admin and hotel IT |
 
-## 2. Single combined upgrade — production project
+## 2. One combined release — after backup
 
-**IMPORTANT:** Confirm project reference is the production project \`qamckmvukksiufucpetx\`. 
-Three schema migrations are required on top of previously applied migrations 001–005:
+**No further individual feature UAT until all V2 source and database migrations are complete.**
 
-1. Back up the current database before any schema changes (Supabase backups or managed SQL export).
-2. SQL Editor: run \`supabase/migrations/20261121_006_admin_leave_edit_offday.sql\`.
-3. SQL Editor: run \`supabase/migrations/20261121_007_overtime_approval.sql\`.
-4. SQL Editor: run \`supabase/migrations/20261121_008_ot_form_template.sql\`.
-5. Edge Functions → \`staff-api\` → replace with **latest** \`supabase/functions/staff-api/index.ts\`, then deploy ONCE.
-6. Cloudflare Git build: confirm deployment of GitHub \`main\` to existing Worker \`skybar-staff-management-v2\` and that \`.assetsignore\` prevents migrations, API code and docs from becoming public website assets.
-7. **Never switch Verify JWT to ON**, unless replacing the current custom Employee ID+PIN session system with a Supabase Auth JWT workflow. The current app validates sessions server-side.
-8. Do not run the staging-only \`supabase/staging/uat_leave_bypass_only.sql\` against this project. Production go-live lock **2027-01-01** must remain.
+1. Confirm this is the current SkyBar V2 production Supabase project. Back up the existing data first, and retain a known-good copy of the deployed Edge Function.
+2. Open Supabase SQL Editor and run **only** `supabase/migrations/20261121_006_008_combined_release.sql` ONCE. It applies 006, 007 and 008 atomically, refuses an isolated UAT database, and checks that the 1 January 2027 submission lock still exists.
+3. In Supabase Edge Functions → `staff-api`, replace with the latest `supabase/functions/staff-api/index.ts` from GitHub `main` and deploy once. Keep Verify JWT OFF for the existing custom staff session authentication.
+4. Cloudflare Git deploy: verify `main` and the committed `wrangler.jsonc` are used, and the **strict** `.assetsignore` allows exactly `index.html`, `config.js`, `assets/app.js`, `assets/styles.css`, `assets/ot-form-generator.js`. No `/supabase/`, `/docs/`, `/README.md` or `/wrangler.jsonc` may be publicly retrievable.
+5. Admin → OT Approval & Reporting → Upload / Replace Template → upload `SkyBar_OT_Master_Original_Format.xlsx`, based on the real source `OT form.xlsx`. This workbook contains the original sheet, embedded hotel logo, 28 merge ranges, fonts and print settings. No employee data is loaded at this step.
+6. Keep `submit_leave_v2` and `submit_overtime_v2` locked before 2027-01-01. Never run `supabase/staging/uat_leave_bypass_only.sql` against production.
+7. Only **after** all of these changes are deployed: perform one combined UAT in a separate database/Worker, review OT print parity in Microsoft Excel, and obtain HR/IT sign-off before opening staff production.
 
-**Rollback:** Before proceeding, export a schema/database backup and retain old Edge Function code from GitHub history. SQL 006 extends allowed leave types and SQL 007 adds fields/RPC; do not drop new constraints/columns merely to roll back frontend. Review data created after deployment before any rollback.
+**Do not run 006, 007 or 008 separately after the combined release.** The three original files remain in GitHub for source transparency and troubleshooting, not as an additional install step.
+
+**Rollback:** Record exact previous Edge/Cloudflare versions before deployment and retain an approved DB backup. The combined SQL adds new table/function/columns and expands a check constraint; do not blindly drop the new schema if transactions were recorded after the upgrade.
 
 ## 3. Leave correction business rules
 
