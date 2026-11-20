@@ -305,6 +305,14 @@ function admin(){
   if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
   const people=state.overview.employees||[];
   const pend=state.overview.pending||[];
+  const adminOt=state.overview.adminOt||[];
+  const otRows=adminOt.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b></td><td>'+fmt(r.ot_date)+'</td>'+
+   '<td>'+esc(r.shift_start)+' – '+esc(r.shift_end)+'</td><td>'+num(Number(r.ot_minutes)/60)+'</td>'+
+   '<td>'+esc(r.claim_type)+'</td><td>'+status(r.status)+'</td><td><div class="staff-actions">'+
+   '<button class="ghost-btn" data-print-admin-ot="'+esc(r.id)+'">Print</button>'+
+   (r.status==='PENDING'?'<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="APPROVED">Approve</button>'+
+    '<button class="ghost-btn" data-ot-action="'+esc(r.id)+'" data-ot-decision="REJECTED">Reject</button>':'')+
+   '</div></td></tr>').join('');
   const allLeaves=(state.overview.adminLeaves||[]).filter(r=>['PENDING','APPROVED'].includes(r.status));
   const leaveRows=allLeaves.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b><div class="muted">'+esc(r.request_code||'')+'</div></td>'+
   '<td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td>'+
@@ -332,7 +340,10 @@ function admin(){
     '<div class="card table-wrap">'+(leaveRows?
     '<table><thead><tr><th>Employee / Ref</th><th>Leave Dates</th><th>Type</th><th>Days</th><th>Status</th><th>Admin Action</th></tr></thead><tbody>'+leaveRows+'</tbody></table>':
     cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
-    title('Remaining Migration')+'<div class="card"><p class="muted">Overtime approval, HR export and reports are being completed before full UAT.</p></div>';
+    '<div class="section-bar"><h2>OT Approval & Reporting</h2><button id="exportOTBtn" class="primary-btn">Export OT CSV</button></div>'+
+    '<div class="card table-wrap">'+(adminOt.length?'<table><thead><tr><th>Staff</th><th>Date</th><th>Shift</th><th>OT Hours</th><th>Claim Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+otRows+'</tbody></table>':
+      cardEmpty('No overtime submissions yet.'))+'</div>'+
+    '<div class="soft-note" style="margin:16px 0">Admin can approve or reject pending OT, print individual claims, or export all records to Excel-compatible CSV. Exact hotel HR OT template remains to be matched when its source is available.</div>';
 }
 
 
@@ -559,6 +570,11 @@ document.querySelectorAll('[data-edit-al]').forEach(x=>x.onclick=()=>editAL(x.da
 document.querySelectorAll('[data-edit-ph]').forEach(x=>x.onclick=()=>editPH(x.dataset.editPh));
 document.querySelectorAll('[data-toggle-ph]').forEach(x=>x.onclick=()=>togglePH(x.dataset.togglePh));
 document.querySelectorAll('[data-edit-leave-type]').forEach(x=>x.onclick=()=>editLeaveType(x.dataset.editLeaveType));
+$('exportOTBtn')?.addEventListener('click',exportOT);
+document.querySelectorAll('[data-ot-action]').forEach(el=>el.onclick=()=>otStatusAction(el.dataset.otAction,el.dataset.otDecision));
+document.querySelectorAll('[data-print-admin-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printAdminOt,true));
+document.querySelectorAll('[data-print-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printOt,false));
+document.querySelectorAll('[data-cancel-ot]').forEach(el=>el.onclick=()=>cancelOT(el.dataset.cancelOt));
 $('addStaffBtn')?.addEventListener('click',()=>editStaff());
 document.querySelectorAll('[data-edit-staff]').forEach(x=>x.onclick=()=>editStaff(x.dataset.editStaff));
 document.querySelectorAll('[data-staff-status]').forEach(x=>x.onclick=()=>changeStaffStatus(x.dataset.staffStatus));
