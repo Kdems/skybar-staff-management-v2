@@ -66,6 +66,36 @@ async function unpack(buf){
  if(!files.some(f=>f.name==='xl/worksheets/sheet1.xml'))throw Error('OT template must have its main sheet in sheet1.xml');
  return files;
 }
+async function validateTemplate(buffer){
+ const files=await unpack(buffer);
+ const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
+ const drawings=files.some(f=>f.name.startsWith('xl/drawings/'));
+ const logo=files.some(f=>/^xl\/media\/[^/]+\.(png|jpe?g)$/i.test(f.name));
+ const margins=files.some(f=>f.name==='xl/styles.xml');
+ if(!drawings||!logo||!margins)throw Error('OT template must retain original hotel logo, drawings and Excel styles');
+ const root=new DOMParser().parseFromString(td.decode(sheet.data),'application/xml');
+ if(root.querySelector('parsererror'))throw Error('Invalid OT sheet XML');
+ const merges=new Set([...root.getElementsByTagNameNS(NS,'mergeCell')].map(el=>el.getAttribute('ref')));
+ for(const ref of ['A15:A30','A31:A45','A12:B14','C12:D13','G12:I13','C8:E8','C10:E10','R8:U8']){
+  if(!merges.has(ref))throw Error('This workbook does not match the original 16th–15th OT sheet layout ('+ref+')');
+ }
+ const cells=[...root.getElementsByTagNameNS(NS,'c')];
+ const headerCell=cells.find(el=>el.getAttribute('r')==='A6');
+ let title=headerCell?.textContent?.trim()||'';
+ if(headerCell?.getAttribute('t')==='s'){
+  const strings=files.find(f=>f.name==='xl/sharedStrings.xml');
+  if(!strings)throw Error('Source workbook is missing shared strings');
+  const doc=new DOMParser().parseFromString(td.decode(strings.data),'application/xml');
+  const si=[...doc.getElementsByTagNameNS(NS,'si')];
+  const idx=Number(headerCell.getElementsByTagNameNS(NS,'v')[0]?.textContent);
+  title=si[idx]?.textContent?.trim()||'';
+ }
+ if(!/^OVERTIME\s*\(OT\)$/i.test(title))throw Error('Upload the actual HR OT template saved from the original .xls; reconstructed layouts are not accepted');
+ if(!root.getElementsByTagNameNS(NS,'pageMargins').length||
+    !root.getElementsByTagNameNS(NS,'pageSetup').length)
+  throw Error('Original Excel print margins or page setup are missing. Re-save the original .xls in Microsoft Excel.');
+ return {files,title,mergedCells:merges.size};
+}
 function pack(files){
  const content=[],directory=[];
  let offset=0;
@@ -180,7 +210,7 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
  let raw;
  try{raw=Uint8Array.from(atob(encoded),v=>v.charCodeAt(0))}
  catch{throw Error('Corrupted HR OT template');}
- const files=await unpack(raw.buffer);
+ const {files}=await validateTemplate(raw.buffer);
  const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
  // Keep the original Excel sheet, logo, fonts, colors, borders, merge ranges,
  // original HR wording, approval signatures and print settings unchanged.
@@ -238,5 +268,5 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
  setTimeout(()=>URL.revokeObjectURL(url),5000);
  return {filename,count:source.length,periodStart:toISO(from),periodEnd:toISO(to)};
 }
-window.SKYBAR_OT_FORM_GENERATOR=Object.freeze({download});
+window.SKYBAR_OT_FORM_GENERATOR=Object.freeze({download,validateTemplate});
 })();
