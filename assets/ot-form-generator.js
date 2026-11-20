@@ -191,6 +191,27 @@ function updateSheet(xml,entries){
  for(const [ref,val] of Object.entries(entries))set(ref,val);
  return new XMLSerializer().serializeToString(doc);
 }
+function renameWorkbookTab(files,employeeName){
+ const name=(String(employeeName||'OT').replace(/[\\/*?:\[\]\u0000-\u001F]/g,' ').replace(/^'+|'+$/g,'').trim().slice(0,31)||'OT');
+ const workbook=files.find(x=>x.name==='xl/workbook.xml');
+ if(!workbook)throw Error('OT template workbook metadata is missing');
+ const doc=new DOMParser().parseFromString(td.decode(workbook.data),'application/xml');
+ if(doc.querySelector('parsererror'))throw Error('Invalid OT workbook metadata');
+ const sheet=doc.getElementsByTagNameNS(NS,'sheet')[0];
+ if(!sheet)throw Error('Original OT worksheet is missing');
+ sheet.setAttribute('name',name);
+ workbook.data=te.encode(new XMLSerializer().serializeToString(doc));
+ const props=files.find(x=>x.name==='docProps/app.xml');
+ if(props){
+  const pdoc=new DOMParser().parseFromString(td.decode(props.data),'application/xml');
+  const title=pdoc.getElementsByTagName('TitlesOfParts')[0];
+  const parts=title?.getElementsByTagNameNS('http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes','lpstr');
+  if(parts?.length){
+   parts[0].textContent=name;
+   props.data=te.encode(new XMLSerializer().serializeToString(pdoc));
+  }
+ }
+}
 async function sanitizeTemplate(buffer){
  const {files}=await validateTemplate(buffer);
  const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
@@ -205,10 +226,11 @@ async function sanitizeTemplate(buffer){
 }
 async function download({selected,records,employee,preparedBy,loadTemplate}){
  if(!selected?.ot_date)throw Error('OT record not found');
+ if(!String(employee?.position||'').trim())throw Error('Staff Position must be recorded before HR OT export');
  const {from,to,nextMonth}=getPeriod(selected.ot_date);
  const source=(records||[]).filter(r=>
   r.staff_id===selected.staff_id &&
-  r.ot_date>=toISO(from)&&r.ot_date<=toISO(to)&&['PENDING','APPROVED'].includes(r.status)
+  r.ot_date>=toISO(from)&&r.ot_date<=toISO(to)&&r.status==='APPROVED'
  );
  const byDay=new Map();
  for(const row of source){
@@ -273,6 +295,7 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
   // Split shift / night shift / Certified By remain blank if not recorded.
  }
  sheet.data=te.encode(updateSheet(td.decode(sheet.data),filled));
+ renameWorkbookTab(files,employee?.name||employee?.employee_id);
  const result=pack(files),url=URL.createObjectURL(result);
  const name=(employee?.employee_id||'STAFF').replace(/[^A-Za-z0-9_-]/g,'');
  const filename='SkyBar_Original_OT_Form_'+name+'_'+toISO(from)+'_to_'+toISO(to)+'.xlsx';
