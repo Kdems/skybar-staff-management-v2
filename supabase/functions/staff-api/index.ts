@@ -62,7 +62,11 @@ async function login(payload:any){
   const employeeId=String(payload.employeeId||"").trim().toUpperCase();
   const pin=String(payload.pin||"");
   if(!/^[A-Z0-9_-]{2,32}$/.test(employeeId)||!/^[0-9]{6,8}$/.test(pin))throw new ApiError("Invalid Employee ID or PIN");
-  const u=await rpc("login_staff",{p_employee_id:employeeId,p_pin:pin});
+  const recent=await request("login_attempts?employee_id=eq."+encodeURIComponent(employeeId)+"&attempted_at=gt."+encodeURIComponent(new Date(Date.now()-15*60000).toISOString())+"&select=id&limit=8");
+  if(recent.length>=8)throw new ApiError("Too many attempts. Try again later",429);
+  let u:any;
+  try{u=await rpc("login_staff",{p_employee_id:employeeId,p_pin:pin});}
+  catch(e){await request("login_attempts","POST",[{employee_id:employeeId}]);throw new ApiError("Invalid Employee ID or PIN",401);}
   if(!u?.id)throw new ApiError("Invalid Employee ID or PIN",401);
   const token=tokenValue();
   await request("staff_sessions","POST",[{
@@ -82,7 +86,7 @@ async function bootstrap(staff:Staff){
     request("al_balances?staff_id=eq."+staff.id+"&source_year=lte."+year+"&select=entitlement,carry_forward,adjustment"),
     request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,source_year"),
     request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code&order=submitted_at.desc&limit=150"),
-    request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id,staff(name)"),
+    request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
     request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,ot_minutes,status&order=created_at.desc&limit=150"),
     request("staff?active=eq.true&role=eq.ADMIN&select=id,employee_id,name,position")
   ]);
@@ -90,7 +94,7 @@ async function bootstrap(staff:Staff){
   const alGranted=als.reduce((n:number,r:any)=>n+Number(r.entitlement)+Number(r.carry_forward)+Number(r.adjustment),0);
   const alUsed=reserved.filter((r:any)=>r.leave_type==="AL").reduce((n:number,r:any)=>n+Number(r.units),0);
   // Include all active requests across the database for PH credit consumption, not just the last 150.
-  const usage=await request("ph_usage?credit_id=in.("+credits.map((c:any)=>c.id).join(",")+")&select=credit_id,units,leave_requests!inner(status)");
+  const usage=credits.length ? await request("ph_usage?credit_id=in.("+credits.map((c:any)=>c.id).join(",")+")&select=credit_id,units,leave_requests!inner(status)") : [];
   const sums=new Map<string,number>();
   for(const u of usage){if(["PENDING","APPROVED"].includes(u.leave_requests?.status))sums.set(u.credit_id,(sums.get(u.credit_id)||0)+Number(u.units))}
   const today=localDate();
