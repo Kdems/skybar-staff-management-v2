@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1528">
+  <meta name="description" content="SkyBar Staff Management — leave, public holidays and overtime.">
+  <title>SkyBar Staff Management V2</title>
+  <link rel="stylesheet" href="./assets/styles.css">
+  <script defer src="./config.js"></script>
+  <script defer src="./assets/app.js"></script>
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="dialog">
+    <div class="dialog-head"><h2 id="modalTitle">Confirmation</h2><button class="icon-button" id="modalClose" aria-label="Close">✕</button></div>
+    <div id="modalContent"></div><div class="dialog-actions" id="modalActions"></div>
+  </div></div>
+  <section id="loginScreen" class="login-screen">
+    <div class="login-art"><span class="eyebrow">SKYBAR · TRADERS HOTEL KUALA LUMPUR</span><h1>One place for<br><em>every shift.</em></h1><p>Leave, public holiday credits and overtime. Clearer for the team, easier for management.</p><div class="art-meta"><span>LEAVE</span><span>PH LEDGER</span><span>OVERTIME</span></div></div>
+    <div class="login-panel">
+      <div class="brand-mark">SB</div><p class="eyebrow">STAFF PORTAL · VERSION 2.0</p><h2>Welcome back.</h2><p class="subtle">Sign in using your Staff ID and PIN.</p>
+      <div id="setupNote" class="info-panel hidden">Supabase has not been connected yet. You can preview the interface safely; no data will be saved.</div>
+      <form id="loginForm" novalidate>
+        <label for="employeeId">Employee ID</label><input id="employeeId" autocomplete="username" placeholder="e.g. SB001" required>
+        <label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="6–8 digit PIN" required minlength="6" maxlength="8">
+        <button class="primary-btn" id="loginBtn" type="submit">Sign in <span>↗</span></button>
+      </form>
+      <button class="text-link hidden" id="previewBtn">Explore preview →</button>
+      <p class="login-footer">Target go-live <strong>01 January 2027</strong> · Malaysia time</p>
+    </div>
+  </section>
+  <main id="appScreen" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="brand-mark small">SB</div><div><strong>SkyBar</strong><small>Staff Management</small></div></div>
+      <div class="nav-caption">WORKSPACE</div>
+      <nav id="sideNav" class="side-nav" aria-label="Primary navigation">
+        <button data-page="overview" class="nav-button active"><span class="nav-icon">◫</span> Overview</button>
+        <button data-page="leave" class="nav-button"><span class="nav-icon">▦</span> Leave Request</button>
+        <button data-page="calendar" class="nav-button"><span class="nav-icon">▤</span> Leave Calendar</button>
+        <button data-page="overtime" class="nav-button"><span class="nav-icon">◷</span> Overtime</button>
+        <button data-page="history" class="nav-button"><span class="nav-icon">☷</span> My Requests</button>
+        <button data-page="admin" class="nav-button hidden" id="adminNav"><span class="nav-icon">⚙</span> Admin</button>
+      </nav>
+      <div class="sidebar-bottom"><div class="sidebar-user"><div class="avatar" id="avatar">D</div><div><strong id="sidebarName">Demo User</strong><small id="sidebarRole">Staff</small></div></div><button id="logoutBtn" class="outline-btn">Sign out</button></div>
+    </aside>
+    <section class="workspace">
+      <div class="topbar"><div class="topbar-title"><span class="eyebrow">SKYBAR / STAFF MANAGEMENT</span><h1 id="pageHeading">Overview</h1></div><div class="topbar-actions"><span class="status-chip" id="modeBadge">PREVIEW</span><span class="date-chip" id="todayLabel"></span></div></div>
+      <div id="previewNotice" class="preview-notice hidden">PREVIEW MODE — Demo data only. Submissions, approvals and edits are disabled until Supabase is configured.</div>
+      <div id="view"></div>
+      <footer class="app-footer">SkyBar Staff Management V2.0 · Designed for 2027 operations · Asia/Kuala_Lumpur</footer>
+    </section>
+  </main>
+</body>
+</html>
