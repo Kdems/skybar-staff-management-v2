@@ -118,32 +118,39 @@ function openingBalanceYear(year){
   return {p,opening:opening?.active?Number(opening.units):0,other};
  });
 }
-function openingBalanceMarkup(year,preset={}){
+function openingBalanceMarkup(year,preset={},selected=new Set()){
  return '<div class="bulk-dialog">'+
  '<p class="muted">Enter the <b>additional approved outstanding PH balance</b> for each staff in '+year+'. It is recorded as a separate historical credit. Existing individual PH credits are shown so you can avoid double counting.</p>'+
  '<div class="field"><label for="openingYear">Source year</label><select id="openingYear">'+
  [2025,2026].map(y=>'<option value="'+y+'" '+(year===y?'selected':'')+'>'+y+'</option>').join('')+'</select></div>'+
- '<div class="bulk-fill"><div class="field"><label for="openingFillValue">Same PH balance for all staff (optional)</label><input id="openingFillValue" type="number" min="0" max="30" step="0.5" placeholder="e.g. 2"></div><button class="ghost-btn" id="openingFillAll" type="button">Apply to All Staff</button></div>'+
- '<div class="table-wrap"><table class="bulk-ledger"><thead><tr><th>Staff</th><th>Other PH already credited</th><th>Additional PH balance (days)</th></tr></thead><tbody>'+
+ '<div class="section-bar"><div><h3>Select staff to update</h3><p>Only ticked staff will be saved. Unticked staff are not changed.</p></div><div class="staff-actions"><button class="ghost-btn" id="openingSelectAll" type="button">Select All</button><button class="ghost-btn" id="openingSelectNone" type="button">Clear</button></div></div>'+
+ '<div class="bulk-fill"><div class="field"><label for="openingFillValue">Same PH balance for selected staff</label><input id="openingFillValue" type="number" min="0" max="30" step="0.5" placeholder="e.g. 2"></div><button class="ghost-btn" id="openingFillAll" type="button">Apply to Selected Staff</button></div>'+
+ '<div class="table-wrap"><table class="bulk-ledger"><thead><tr><th>Select</th><th>Staff</th><th>Other PH already credited</th><th>Additional PH balance (days)</th></tr></thead><tbody>'+
  openingBalanceYear(year).map(({p,opening,other})=>
- '<tr><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.employee_id)+'</div></td>'+
+ '<tr><td><input type="checkbox" class="opening-select" data-opening-select="'+esc(p.id)+'" '+(selected.has(p.id)?'checked':'')+' aria-label="Include '+esc(p.name)+' in PH balance changes"></td><td><b>'+esc(p.name)+'</b><div class="muted">'+esc(p.employee_id)+'</div></td>'+
  '<td>'+num(other)+' day(s)</td><td><input type="number" data-opening-staff="'+esc(p.id)+'" min="0" max="30" step="0.5" required value="'+esc(preset[p.id]??opening)+'" aria-label="Historical PH balance for '+esc(p.name)+'"></td></tr>').join('')+
  '</tbody></table></div>'+
  '<div class="soft-note" style="margin-top:12px">Existing opening balances are prefilled. Saving again updates them instead of adding duplicates. Zero deactivates an unused opening credit; used credits cannot be zeroed. For current-year earned PH, the ledger stores the recording date as the as-of date, not as an official holiday.</div></div>';
 }
-function openHistoricalBulk(year=2025,preset={}){
+function openHistoricalBulk(year=2025,preset={},selected=null){
  if(state.preview)return toast('Preview is read-only',true);
  if(!bulkStaff().length)return toast('No active staff accounts',true);
- customForm('Bulk Historical PH Balances',openingBalanceMarkup(year,preset),'Review Historical Balances',async()=>{
+ const checked=new Set(selected||[]);
+ customForm('Bulk Historical PH Balances',openingBalanceMarkup(year,preset,checked),'Review Historical Balances',async()=>{
   const chosen=Number($('openingYear').value);
-  const balances=[...document.querySelectorAll('[data-opening-staff]')].map(el=>({staffId:el.dataset.openingStaff,units:Number(el.value)}));
+  const picked=[...document.querySelectorAll('[data-opening-select]:checked')].map(el=>el.dataset.openingSelect);
+  if(!picked.length)throw Error('Select at least one staff to save');
+  const balances=picked.map(staffId=>{
+   const el=[...document.querySelectorAll('[data-opening-staff]')].find(input=>input.dataset.openingStaff===staffId);
+   return {staffId,units:Number(el.value)};
+  });
   if(balances.some(b=>!Number.isFinite(b.units)||b.units<0||b.units>30||b.units*2!==Math.trunc(b.units*2)))
    throw Error('Balances must be 0–30 in 0.5-day increments');
-  const snapshot=Object.fromEntries(balances.map(b=>[b.staffId,b.units]));
+  const snapshot=Object.fromEntries([...document.querySelectorAll('[data-opening-staff]')].map(el=>[el.dataset.openingStaff,Number(el.value)]));
   modal('Confirm Historical PH Balances',
-   'Save '+chosen+' opening PH credits for '+balances.length+' staff in one transaction? Existing individual credits are NOT removed or deducted from these entered amounts.',
-   [{text:'Edit balances',action:()=>openHistoricalBulk(chosen,snapshot)},
-    {text:'Save All '+balances.length+' Staff',primary:true,action:async()=>{
+   'Save '+chosen+' opening PH credits for '+balances.length+' SELECTED staff only? Other staff will not be changed. Existing individual credits will remain.',
+   [{text:'Edit balances',action:()=>openHistoricalBulk(chosen,snapshot,picked)},
+    {text:'Save '+balances.length+' Selected Staff',primary:true,action:async()=>{
       try{
        const result=await call('adminBulkHistoricalPH',{batch:{year:chosen,balances}});
        await reload();
@@ -159,9 +166,15 @@ function openHistoricalBulk(year=2025,preset={}){
   const value=Number(el.value);
   if(!Number.isFinite(value)||value<0||value>30||value*2!==Math.trunc(value*2))
    return toast('Use whole or half-day values (0–30)',true);
-  document.querySelectorAll('[data-opening-staff]').forEach(input=>input.value=String(value));
-  toast('Applied '+value+' day(s) to all rows. Review before saving.');
+  const selectedIds=[...document.querySelectorAll('[data-opening-select]:checked')].map(el=>el.dataset.openingSelect);
+  if(!selectedIds.length)return toast('Select staff first',true);
+  document.querySelectorAll('[data-opening-staff]').forEach(input=>{
+   if(selectedIds.includes(input.dataset.openingStaff))input.value=String(value);
+  });
+  toast('Applied '+value+' day(s) to '+selectedIds.length+' selected staff. Review before saving.');
  };
+ $('openingSelectAll').onclick=()=>document.querySelectorAll('[data-opening-select]').forEach(el=>el.checked=true);
+ $('openingSelectNone').onclick=()=>document.querySelectorAll('[data-opening-select]').forEach(el=>el.checked=false);
  $('openingYear').onchange=()=>openHistoricalBulk(Number($('openingYear').value));
 }
 function balances(){
