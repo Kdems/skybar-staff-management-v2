@@ -55,7 +55,7 @@ Three schema migrations are required on top of previously applied migrations 001
 - Working baseline: 9 hours; overtime is measured as elapsed shift minutes minus 540.
 - Admin can Approve or Reject a **Pending** claim. Rejection requires an explanation; staff can Cancel their own Pending claim.
 - Already decided OT cannot be approved, rejected or cancelled again via the API.
-- Staff can print a generic claim form. The original hotel OT `.xls` was supplied and its cell layout, labels, merges, embedded logo and signatures inspected. A macro-free `.xlsx` reconstruction has been produced. SQL 008 enables Admin to upload the approved workbook through Admin → OT Approval & Reporting → Upload / Replace Template. Exact visual parity should be reviewed in Excel during combined UAT.
+- Staff can print a generic claim form. The original hotel OT `.xls` was supplied and inspected. An approximate reconstruction was rejected for fidelity. Always upload an `.xlsx` converted from the ORIGINAL `.xls` using Microsoft Excel Save As; the tool now preserves original visual/style parts and checks template identity. SQL 008 enables Admin to upload the approved workbook through Admin → OT Approval & Reporting → Upload / Replace Template. Exact visual parity should be reviewed in Excel during combined UAT.
 - Admin reports are available as XLSX files via client-side export. The exporter is local and does not send data to third-party CDNs.
 
 ## 5. Security and operational readiness before staff access
@@ -95,7 +95,14 @@ Use a **fresh separate Supabase project and separate Cloudflare Worker**, not a 
 - All new OT downloads use one admin-uploaded .xlsx template stored in Supabase privately; only authenticated staff may retrieve it.
 - Macro-free reconstruction is available as a conversation download. For exact visual parity, use Excel Save As to .xlsx from the original workbook (preserving embedded drawings, print settings, fonts), then upload the approved copy via Admin.
 - Admin template updates are audited and do not alter claim records. Staff cannot change the template.
-- The system fills employee identity, period 11th–10th, actual shift, OT from/to, rates x1.5/x2.0/x3.0, Off Day/Compulsory PH and preparation date. Template totals and original approval/signature positions remain.
+- The system fills employee identity, period 16th–15th, actual shift, OT from/to, rates x1.5/x2.0/x3.0, Off Day/Compulsory PH and preparation date. Template totals and original approval/signature positions remain.
 - Fields for night shift, split shift and certification are left blank when not captured by the OT system; do not fabricate details.
 - If multiple OT claims exist on one calendar date, the downloader stops rather than silently dropping extra records; use the full OT register for reconciliation.
 - Do not place OT template in public Cloudflare static assets. Run SQL 008 and deploy latest Edge API before uploading template.
+
+### Strict source parity changes
+
+- Actual source period is **16th of month to 15th of next month**, not 11th–10th. Original worksheet rows 15–30 are reserved for days 16–31 and rows 31–45 for days 1–15. Short first months leave unused rows blank; merged month label blocks are not modified.
+- Original source has `OVERTIME (OT)` in A6. The Admin uploader now validates this, the exact source merge ranges, image/drawing and print settings. Wrong approximation templates are rejected.
+- All former sample shift/OT inputs in the uploaded workbook are cleared when generating a download; all other workbook parts, images, borders, HR instructions and approval sections remain unchanged.
+- Exact equality of PDF/printed appearance is still dependent on the font availability, Excel version, printer drivers and Excel Save As conversion. Confirm using Excel's original Print Preview during combined UAT; do not claim verified 100% visual equivalence before that.
