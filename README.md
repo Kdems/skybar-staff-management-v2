@@ -21,9 +21,9 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Admin correction of leave type AL / PH / EL / OFF | Migration 006 + Edge/API/UI committed; requires SQL 006 + latest Edge deployment |
 | OT with 9-hour deduction, midnight crossings | Implemented; awaiting combined end-to-end UAT |
 | OT approval / reject / pending cancel | Migration 007 + Edge/API/UI committed; requires SQL 007 + latest Edge deployment |
-| Source-matched OT form (.xlsx) | Original 2009 template inspected and macro-free reconstruction created; Admin upload via migration 008 + Edge API + UI committed |
+| Source-matched OT form (.xlsx) | Original 2009 template inspected; use original Excel Save As macro-free .xlsx, not approximate reconstruction; Admin upload via migration 008 + Edge API + UI committed |
 | Management reports, native XLSX export, and audit | Code committed; requires latest Edge deployment and UAT |
-| Admin-managed approved OT master template | Migration 008, authenticated template delivery, 11th–10th filled workbook download; final UAT pending |
+| Admin-managed approved OT master template | Migration 008, authenticated template delivery, 16th–15th filled workbook download; final UAT pending |
 | Employee registration, position, ID change, resignation, PIN reset and safe delete | **Code committed; requires migration 003 + redeploy of Edge API + UAT** |
 | Database backups and restore exercise | Supabase plan-dependent; configuration and recovery rehearsal pending |
 
