@@ -20,10 +20,21 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Leave approval and cancel | Implemented; needs UAT |
 | OT with 9-hour deduction, midnight crossings | Implemented; needs UAT |
 | OT approval and original HR Excel export | **Not migrated yet** |
-| Employee creation, resignation, ID change, PIN reset | **Not migrated yet** |
+| Employee registration, position, ID change, resignation, PIN reset and safe delete | **Code committed; requires migration 003 + redeploy of Edge API + UAT** |
 | Automated database backup and audit reporting | **Not configured yet** |
 
 **Security notes:** The frontend contains no service role key, password or real staff records. All database access goes through an Edge Function. The browser only holds a short-lived opaque session token (sessionStorage). Database RLS is enabled, with no policies for public access. Admin and server security need a full penetration review before launch.
+
+## Employee Management V2 (next setup step)
+
+1. Supabase SQL Editor: run `supabase/migrations/20261120_003_employee_management.sql` **after** 001 and 002.
+2. Supabase Edge Functions → `staff-api` → editor: replace function source with the latest `supabase/functions/staff-api/index.ts`, then deploy the updated version. Keep Verify JWT OFF for the existing custom-session design.
+3. GitHub Pages publishes updated `assets/app.js` / `index.html` from the main branch automatically.
+4. Hard refresh `https://kdems.github.io/skybar-staff-management-v2/` and log in as `ADMIN001`.
+5. In Admin → Employee Management test creating a **dummy staff** account with an **8-digit PIN** and Position. Test Change ID, Mark Resigned, Reactivate, Reset PIN. A staff account with historical data must not be permanently deleted.
+6. Do not import real staff personal records until all access control and recovery tests are completed.
+
+The V2 SQL migration does **not** erase the existing administrator. Live Leave/OT submissions remain locked until 2027-01-01.
 
 ## Step 1 — GitHub Pages preview (no Supabase needed)
 
