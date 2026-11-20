@@ -11,7 +11,7 @@ const isoDay=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'
 const fmt=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'}):'—';
 const num=n=>Number(n||0).toLocaleString('en-MY',{maximumFractionDigits:1});
 const status=s=>'<span class="badge '+esc(String(s||'').toLowerCase())+'">'+esc(s||'—')+'</span>';
-const types={AL:'Annual Leave',PH:'Public Holiday',EL:'Emergency Leave'};
+const types={AL:'Annual Leave',PH:'Public Holiday',EL:'Emergency Leave',OFF:'Off Day (Admin Only)'};
 let toastTimer;
 function toast(s,error=false){const el=$('toast');el.textContent=s;el.className='toast show'+(error?' error':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.className='toast',4500)}
 function modal(title,message,actions){$('modalTitle').textContent=title;$('modalContent').innerHTML='<p class="muted">'+esc(message)+'</p>';$('modalActions').replaceChildren();actions.forEach(a=>{const b=document.createElement('button');b.className=a.primary?'primary-btn':'ghost-btn';b.textContent=a.text;b.onclick=()=>{closeModal();a.action?.()};$('modalActions').append(b)});$('overlay').classList.remove('hidden')}
@@ -290,6 +290,10 @@ function admin(){
   if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
   const people=state.overview.employees||[];
   const pend=state.overview.pending||[];
+  const allLeaves=(state.overview.adminLeaves||[]).filter(r=>['PENDING','APPROVED'].includes(r.status));
+  const leaveRows=allLeaves.map(r=>'<tr><td><b>'+esc(r.employee_name)+'</b><div class="muted">'+esc(r.request_code||'')+'</div></td>'+
+  '<td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td>'+
+  '<td>'+num(r.units)+'</td><td>'+status(r.status)+'</td><td><button class="ghost-btn" data-edit-leave-type="'+esc(r.id)+'">Edit Type</button></td></tr>').join('');
   return '<div class="grid grid-3">'+metric('Registered Staff',people.length,'Active and archived')+
     metric('Pending Approval',pend.length,'Leave requests')+
     metric('Go-live','01 Jan 2027','Submission lock active')+'</div>'+
@@ -306,9 +310,14 @@ function admin(){
       '</div></td></tr>').join('')+'</tbody></table>':cardEmpty('No employee records yet.'))+'</div>'+
     title('Pending Leave Approvals')+'<div class="card table-wrap">'+
     (pend.length?'<table><thead><tr><th>Staff</th><th>Dates</th><th>Type</th><th>Reason</th><th>Action</th></tr></thead><tbody>'+
-      pend.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+esc(r.reason)+'</td><td><div class="staff-actions"><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="APPROVED">Approve</button><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="REJECTED">Reject</button></div></td></tr>').join('')+'</tbody></table>':
+      pend.map(r=>'<tr><td>'+esc(r.employee_name)+'</td><td>'+fmt(r.start_date)+' – '+fmt(r.end_date)+'</td><td>'+esc(types[r.leave_type]||r.leave_type)+'</td><td>'+esc(r.reason)+'</td><td><div class="staff-actions"><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="APPROVED">Approve</button><button class="ghost-btn" data-decision="'+esc(r.id)+'" data-status="REJECTED">Reject</button><button class="ghost-btn" data-edit-leave-type="'+esc(r.id)+'">Edit Type</button></div></td></tr>').join('')+'</tbody></table>':
       cardEmpty('No pending requests.'))+'</div>'+
-    title('Next modules')+'<div class="card"><p class="muted">AL yearly balances, PH bulk calendar and carry-forward, OT approval and downloadable HR Excel form are being migrated to V2. We will test these modules before the January launch.</p></div>';
+    title('Admin Leave Corrections')+
+    '<p class="muted">Only Admin may convert Pending/Approved leave into AL, PH, EL or Off Day (OFF). OFF does not deduct AL or PH but still counts towards the daily two-person limit.</p>'+
+    '<div class="card table-wrap">'+(leaveRows?
+    '<table><thead><tr><th>Employee / Ref</th><th>Leave Dates</th><th>Type</th><th>Days</th><th>Status</th><th>Admin Action</th></tr></thead><tbody>'+leaveRows+'</tbody></table>':
+    cardEmpty('No pending or approved leave requests yet.'))+'</div>'+
+    title('Remaining Migration')+'<div class="card"><p class="muted">Overtime approval, HR export and reports are being completed before full UAT.</p></div>';
 }
 function staffById(id){return(state.overview?.employees||[]).find(p=>p.id===id)}
 function formField(label,id,value='',extra='',type='text'){
