@@ -335,6 +335,35 @@ function admin(){
     title('Remaining Migration')+'<div class="card"><p class="muted">Overtime approval, HR export and reports are being completed before full UAT.</p></div>';
 }
 
+
+function printOT(id,admin=false){
+ const records=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
+ const record=records.find(r=>r.id===id);
+ if(!record)return toast('OT request not found',true);
+ const profile=admin?staffById(record.staff_id):state.user;
+ const employee=admin?record.employee_name:state.user.name;
+ const rows=[
+  ['Employee',employee],['Employee ID',profile?.employee_id||''],
+  ['Position',profile?.position||''],['OT Date',fmt(record.ot_date)],
+  ['Shift',record.shift_start+' – '+record.shift_end],
+  ['Total Shift',num(Number(record.total_shift_minutes)/60)+' hours'],
+  ['Less Normal Shift','9 hours'],
+  ['Claimable OT',num(Number(record.ot_minutes)/60)+' hours'],
+  ['Claim Type',record.claim_type||''],
+  ['Reason',record.reason||''],['Status',record.status||''],
+  ['Admin Note',record.admin_note||'—']
+ ];
+ const markup='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>SkyBar OT Claim</title><style>'+
+ 'body{font:14px Arial,sans-serif;max-width:780px;margin:45px auto;color:#171717}h1,h2{text-align:center}h1{font-size:19px;margin-bottom:5px}h2{font-size:16px;margin:0 0 30px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #444;padding:10px;text-align:left}th{background:#eee;width:36%}.sign{display:flex;gap:30px;margin-top:65px}.sign div{flex:1;border-top:1px solid #333;padding-top:10px}p{font-size:11px;color:#666}@media print{body{margin:0;max-width:none}}</style></head><body>'+
+ '<h1>TRADERS HOTEL KUALA LUMPUR</h1><h2>SKYBAR · OVERTIME CLAIM</h2><table>'+
+ rows.map(([k,v])=>'<tr><th>'+esc(k)+'</th><td>'+esc(v)+'</td></tr>').join('')+
+ '</table><div class="sign"><div>Employee Signature / Date</div><div>Department Head / Date</div><div>HR Verification / Date</div></div>'+
+ '<p>SkyBar V2 operational printout. Not certified as identical to the original hotel HR OT Excel form.</p></body></html>';
+ const w=window.open('','_blank');
+ if(!w)return toast('Please allow pop-ups for printing',true);
+ w.document.write(markup);w.document.close();w.focus();
+ w.setTimeout(()=>w.print(),350);
+}
 function otStatusAction(id,decision){
  if(state.preview||state.user?.role!=='ADMIN')return toast('Admin access only',true);
  const item=(state.overview.adminOt||[]).find(x=>x.id===id);
