@@ -3,7 +3,7 @@
  * https://YOUR-PROJECT.supabase.co/functions/v1/staff-api
  */
 window.SKYBAR_CONFIG = Object.freeze({
-  apiUrl: "",
+  apiUrl: "https://qamckmvukksiufucpetx.supabase.co/functions/v1/staff-api",
   goLiveDate: "2027-01-01",
   organization: "SkyBar | Traders Hotel Kuala Lumpur"
 });
