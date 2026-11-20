@@ -1,0 +1,10 @@
+# Secure allow-list for Cloudflare Workers Static Assets
+# Everything not explicitly allowed must stay OUT of the public web bundle.
+# This prevents SQL migrations, Supabase Edge code, docs and repository files
+# from being served by workers.dev. Keep this list narrow.
+*
+!/index.html
+!/config.js
+!/assets/
+!/assets/app.js
+!/assets/styles.css
