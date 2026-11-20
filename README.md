@@ -21,8 +21,9 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Admin correction of leave type AL / PH / EL / OFF | Migration 006 + Edge/API/UI committed; requires SQL 006 + latest Edge deployment |
 | OT with 9-hour deduction, midnight crossings | Implemented; awaiting combined end-to-end UAT |
 | OT approval / reject / pending cancel | Migration 007 + Edge/API/UI committed; requires SQL 007 + latest Edge deployment |
-| Printable OT claim (generic) | Implemented; exact original hotel HR template not yet accessible |
+| Source-matched OT form (.xlsx) | Original 2009 template inspected and macro-free reconstruction created; Admin upload via migration 008 + Edge API + UI committed |
 | Management reports, native XLSX export, and audit | Code committed; requires latest Edge deployment and UAT |
+| Admin-managed approved OT master template | Migration 008, authenticated template delivery, 11th–10th filled workbook download; final UAT pending |
 | Employee registration, position, ID change, resignation, PIN reset and safe delete | **Code committed; requires migration 003 + redeploy of Edge API + UAT** |
 | Database backups and restore exercise | Supabase plan-dependent; configuration and recovery rehearsal pending |
 
@@ -150,7 +151,7 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 
 ## Upcoming milestones
 
-1. Run migrations **006 and 007** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
+1. Run migrations **006, 007 and 008** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
 2. Confirm the GitHub main frontend has been published to Cloudflare and no backend files are publicly served.
 3. Complete single combined UAT (including OFF Admin correction, OT and XLSX downloads) in isolated staging only.
 4. Obtain original hotel OT Excel form to match its exact HR layout; the operational print form is generic.
