@@ -4,6 +4,15 @@
 Source: **GitHub** · Public frontend: **Cloudflare Workers Static Assets** · Backend: **Supabase Edge Functions + PostgreSQL**  
 No Google Apps Script or Google Sheets required.
 
+
+## Combined final release (pending manual Supabase deployment)
+
+- One atomic SQL script: `supabase/migrations/20261121_006_008_combined_release.sql` (covers migration 006, 007, 008; **do not separately rerun** those scripts).
+- Latest `staff-api` includes Admin OFF leave conversion, OT approval, complete authenticated 16th–15th OT period queries, private HR OT template upload/download and Admin reports.
+- Static frontend now contains the original-source OT workbook generator; `wrangler.jsonc` and `.assetsignore` keep backend SQL and internal docs out of Cloudflare static assets.
+- Master workbook: `SkyBar_OT_Master_Original_Format.xlsx` delivered in chat. It is a byte-for-byte copy of the existing `OT form.xlsx`, retaining the embedded logo, print setup, worksheet styles and 28 merged ranges. Upload it once in Admin after SQL/API deployment. Exact rendering still requires Microsoft Excel review in final UAT.
+- Current GitHub code is **not proof of database/Edge/Cloudflare deployment**. Live submissions remain locked before 2027-01-01.
+
 ## Current status
 
 This repository contains the **V2 foundation**. It is not yet ready for staff production use.
