@@ -7,4 +7,4 @@
 
 /* Employee management V2 */
 .staff-actions{display:flex;gap:6px;flex-wrap:wrap}.staff-actions .ghost-btn{padding:7px 9px;font-size:.72rem}.danger-text{color:#ffb5bc!important;border-color:#8c4555!important}.staff-actions button:hover{filter:brightness(1.12)}.pin-button{padding:8px 11px;font-size:.75rem}
-@media(max-width:520px){.pin-button{display:none}.staff-actions{min-width:180px}}
+@media(max-width:520px){.pin-button{padding:7px 8px;font-size:.68rem}.staff-actions{min-width:180px}}
