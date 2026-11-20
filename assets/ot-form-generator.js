@@ -190,6 +190,18 @@ function updateSheet(xml,entries){
  for(const [ref,val] of Object.entries(entries))set(ref,val);
  return new XMLSerializer().serializeToString(doc);
 }
+async function sanitizeTemplate(buffer){
+ const {files}=await validateTemplate(buffer);
+ const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
+ const clear={};
+ for(const col of ['N6','S6','C8','I8','R8','C10','I10','R10','A15','A31'])clear[col]='';
+ const inputCols=['C','D','E','F','G','H','I','K','L','M','N','P','R','S','U'];
+ for(let rn=15;rn<=45;rn++)for(const col of inputCols)clear[col+rn]='';
+ // Do not remove column widths, row heights, any font/color/style, workbook
+ // sheet relationships, drawings, original logo, HR text or print settings.
+ sheet.data=te.encode(updateSheet(td.decode(sheet.data),clear));
+ return pack(files);
+}
 async function download({selected,records,employee,preparedBy,loadTemplate}){
  if(!selected?.ot_date)throw Error('OT record not found');
  const {from,to,nextMonth}=getPeriod(selected.ot_date);
@@ -268,5 +280,5 @@ async function download({selected,records,employee,preparedBy,loadTemplate}){
  setTimeout(()=>URL.revokeObjectURL(url),5000);
  return {filename,count:source.length,periodStart:toISO(from),periodEnd:toISO(to)};
 }
-window.SKYBAR_OT_FORM_GENERATOR=Object.freeze({download,validateTemplate});
+window.SKYBAR_OT_FORM_GENERATOR=Object.freeze({download,validateTemplate,sanitizeTemplate});
 })();
