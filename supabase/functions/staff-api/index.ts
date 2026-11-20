@@ -127,7 +127,7 @@ async function bootstrap(staff:Staff){
       request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
       request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
-      request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes&order=source_year.desc,holiday_date.asc.nullslast"),
+      request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
       request("ph_usage?select=credit_id,units,leave_requests!inner(status)")
     ]);
     const names=new Map(employees.map((e:any)=>[e.id,e.name]));
@@ -190,6 +190,24 @@ serve(async req=>{
     }
 
 
+
+    if(input.action==="adminBulkPH"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.batch||{};
+      if(!Array.isArray(p.staffIds)||!Array.isArray(p.holidays))
+        throw new ApiError("Invalid batch selection");
+      return json(await rpc("admin_apply_ph_schedule_v2",{
+        p_actor:staff.id,p_year:p.year,p_staff_ids:p.staffIds,p_holidays:p.holidays
+      }),200,origin);
+    }
+    if(input.action==="adminBulkHistoricalPH"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.batch||{};
+      if(!Array.isArray(p.balances))throw new ApiError("Invalid PH opening balance data");
+      return json(await rpc("admin_save_ph_opening_balances_v2",{
+        p_actor:staff.id,p_year:p.year,p_balances:p.balances
+      }),200,origin);
+    }
     if(input.action==="adminSaveAL"){
       if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
       const p=input.allocation||{};
