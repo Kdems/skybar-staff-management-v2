@@ -389,6 +389,32 @@ function admin(){
 }
 
 
+function payrollCycleMonth(){
+ const [y,m,d]=myDate().split('-').map(Number);
+ if(d>=16)return y+'-'+String(m).padStart(2,'0');
+ const prior=new Date(y,m-2,16);
+ return prior.getFullYear()+'-'+String(prior.getMonth()+1).padStart(2,'0');
+}
+async function downloadHrOtForCycle(){
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
+ const id=$('hrOTEmployee')?.value||'',month=$('hrOTMonth')?.value||'';
+ if(!id)return toast('Select employee to export',true);
+ if(!/^\d{4}-\d{2}$/.test(month))return toast('Select payroll cycle month',true);
+ const profile=staffById(id);
+ if(!profile)return toast('Employee profile not found',true);
+ if(!String(profile.position||'').trim())return toast('Employee Position must be filled before HR OT download',true);
+ if(!window.SKYBAR_OT_FORM_GENERATOR)return toast('OT exporter not loaded',true);
+ try{
+  toast('Preparing approved OT form for '+profile.name+'…');
+  const period=await call('getOTPeriod',{date:month+'-16',staffId:id});
+  const result=await window.SKYBAR_OT_FORM_GENERATOR.download({
+   selected:{ot_date:month+'-16',staff_id:id},
+   records:period.records,employee:period.employee,
+   preparedBy:state.user.name,loadTemplate:()=>call('getOTTemplate')
+  });
+  toast('HR OT form saved: '+result.count+' approved claim(s), '+result.periodStart+' to '+result.periodEnd);
+ }catch(e){toast(e?.message||'HR OT export failed',true)}
+}
 function uploadOTTemplate(){
  if(state.user?.role!=='ADMIN'||state.preview)return toast('Admin only',true);
  const html='<p class="muted">Upload the original HR <b>Overtime Form.xls</b> through Microsoft Excel <b>Save As → .xlsx</b> (no macros). The system checks the original layout, 16th–15th period sections, logo and print settings, then uses the same template for every staff. Maximum 2 MB.</p>'+
@@ -415,7 +441,7 @@ async function printOT(id,admin=false){
  const list=admin?(state.overview.adminOt||[]):(state.overview.ot||[]);
  const selected=list.find(r=>r.id===id);
  if(!selected)return toast('OT request not found',true);
- if(!['PENDING','APPROVED'].includes(selected.status))return toast('Only pending or approved OT may be exported to the HR form',true);
+ if(selected.status!=='APPROVED')return toast('Only APPROVED OT may be exported to the HR form',true);
  try{
   if(!window.SKYBAR_OT_FORM_GENERATOR)throw Error('OT form exporter is unavailable');
   toast('Preparing original HR OT form…');
@@ -697,6 +723,7 @@ document.querySelectorAll('[data-edit-ph]').forEach(x=>x.onclick=()=>editPH(x.da
 document.querySelectorAll('[data-toggle-ph]').forEach(x=>x.onclick=()=>togglePH(x.dataset.togglePh));
 document.querySelectorAll('[data-edit-leave-type]').forEach(x=>x.onclick=()=>editLeaveType(x.dataset.editLeaveType));
 document.querySelectorAll('[data-admin-report]').forEach(el=>el.onclick=()=>exportAdminReport(el.dataset.adminReport));
+$('downloadHrOTBtn')?.addEventListener('click',downloadHrOtForCycle);
 $('exportOTBtn')?.addEventListener('click',exportOT);
 document.querySelectorAll('[data-ot-action]').forEach(el=>el.onclick=()=>otStatusAction(el.dataset.otAction,el.dataset.otDecision));
 $('uploadOTTemplateBtn')?.addEventListener('click',uploadOTTemplate);
