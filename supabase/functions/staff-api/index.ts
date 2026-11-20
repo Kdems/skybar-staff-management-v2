@@ -263,6 +263,20 @@ serve(async req=>{
         p_actor:staff.id,p_request:input.requestId,p_status:"CANCELLED",p_admin_note:""
       }),200,origin);
     }
+    if(input.action==="getOTTemplate"){
+      return json(await rpc("get_ot_form_v2",{}),200,origin);
+    }
+    if(input.action==="adminUploadOTTemplate"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const filename=String(input.filename||"");
+      const base64=String(input.base64||"");
+      if(!/^[a-zA-Z0-9._ -]{1,100}\.xlsx$/i.test(filename)||
+          base64.length>2800000||base64.length<100||!/^[A-Za-z0-9+/]+={0,2}$/.test(base64))
+        throw new ApiError("Upload a valid macro-free .xlsx template (max 2 MB)");
+      return json(await rpc("admin_set_ot_form_v2",{
+        p_actor:staff.id,p_filename:filename,p_b64:base64
+      }),200,origin);
+    }
     if(input.action==="submitOT"){
       const p=input.request||{};
       return json(await rpc("submit_overtime_v2",{
