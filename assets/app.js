@@ -355,6 +355,8 @@ function admin(){
       '<div class="muted">'+esc(p.department||'SkyBar')+'</div></td><td>'+status(p.employment_status||(p.active?'ACTIVE':'INACTIVE'))+
       (p.last_working_date?'<div class="muted">'+fmt(p.last_working_date)+'</div>':'')+'</td><td><div class="staff-actions">'+
       '<button class="ghost-btn" data-edit-staff="'+esc(p.id)+'">Edit</button>'+
+      '<button class="ghost-btn" data-toggle-ot-approver="'+esc(p.id)+'">'+
+       (p.ot_approver?'OT Approver ✓':'Set OT Approver')+'</button>'+
       (p.role!=='ADMIN'?'<button class="ghost-btn" data-staff-status="'+esc(p.id)+'">Status</button>':'')+
       '<button class="ghost-btn" data-reset-staff-pin="'+esc(p.id)+'">Reset PIN</button>'+
       (p.role!=='ADMIN'?'<button class="ghost-btn danger-text" data-delete-staff="'+esc(p.id)+'">Delete</button>':'')+
@@ -607,6 +609,21 @@ function editStaff(id=null){
     }
   });
 }
+function toggleOTApprover(id){
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
+ const p=staffById(id);
+ if(!p)return toast('Staff account not found',true);
+ const enable=!p.ot_approver;
+ modal((enable?'Set':'Remove')+' OT Approver?',
+  p.name+' will '+(enable?'be selectable':'no longer be selectable')+
+  ' under Instructed By for future overtime applications. Existing OT records remain unchanged.',
+  [{text:'Back'},{text:'Confirm',primary:true,action:async()=>{
+   try{
+    await call('adminSetOTApprover',{staffId:id,enabled:enable});
+    await reload();toast('OT Approver permission updated');
+   }catch(e){toast(e.message,true)}
+  }}]);
+}
 function changeStaffStatus(id){
   const p=staffById(id);
   if(!p||state.preview)return;
@@ -675,6 +692,8 @@ $('uploadOTTemplateBtn')?.addEventListener('click',uploadOTTemplate);
 document.querySelectorAll('[data-print-admin-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printAdminOt,true));
 document.querySelectorAll('[data-print-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printOt,false));
 document.querySelectorAll('[data-cancel-ot]').forEach(el=>el.onclick=()=>cancelOT(el.dataset.cancelOt));
+document.querySelectorAll('[data-toggle-ot-approver]').forEach(el=>
+ el.onclick=()=>toggleOTApprover(el.dataset.toggleOtApprover));
 $('addStaffBtn')?.addEventListener('click',()=>editStaff());
 document.querySelectorAll('[data-edit-staff]').forEach(x=>x.onclick=()=>editStaff(x.dataset.editStaff));
 document.querySelectorAll('[data-staff-status]').forEach(x=>x.onclick=()=>changeStaffStatus(x.dataset.staffStatus));
