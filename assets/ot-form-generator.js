@@ -1,11 +1,10 @@
 /* SkyBar OT Excel generator: uses the original-layout, macro-free workbook template.
  * All assembly happens in the user's browser. No remote spreadsheet service.
- * Required static asset: ./assets/Overtime_Form_Template.xlsx
+ * Template is retrieved from the authenticated Supabase Edge API after Admin upload.
  * Template rebuilt from user-supplied legacy .xls; original VBA is intentionally excluded.
  */
 (() => {
 'use strict';
-const path='./assets/Overtime_Form_Template.xlsx';
 const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const te=new TextEncoder();
 const td=new TextDecoder('utf-8');
@@ -134,7 +133,7 @@ function updateSheet(xml,entries){
  for(const [ref,val] of Object.entries(entries))set(ref,val);
  return new XMLSerializer().serializeToString(doc);
 }
-async function download({selected,records,employee,preparedBy}){
+async function download({selected,records,employee,preparedBy,loadTemplate}){
  if(!selected?.ot_date)throw Error('OT record not found');
  const {from,to,dates}=getPeriod(selected.ot_date);
  const source=(records||[]).filter(r=>
@@ -147,9 +146,14 @@ async function download({selected,records,employee,preparedBy}){
   if(byDay.has(day))throw Error('Multiple OT claims on '+day+'. Use OT Excel report to avoid omitting any claim.');
   byDay.set(day,row);
  }
- const response=await fetch(path,{cache:'no-store'});
- if(!response.ok)throw Error('Original-layout OT template not uploaded to Cloudflare assets yet');
- const files=await unpack(await response.arrayBuffer());
+ if(typeof loadTemplate!=='function')throw Error('OT template service not configured');
+ const template=await loadTemplate();
+ const encoded=String(template?.base64||'').replace(/\s/g,'');
+ if(!encoded||encoded.length>2800000)throw Error('Missing or oversized HR OT template');
+ let raw;
+ try{raw=Uint8Array.from(atob(encoded),v=>v.charCodeAt(0))}
+ catch{throw Error('Corrupted HR OT template');}
+ const files=await unpack(raw.buffer);
  const sheet=files.find(f=>f.name==='xl/worksheets/sheet1.xml');
  const filled={
   N6:'From * '+niceDate(from),S6:'To * '+niceDate(to),
