@@ -23,7 +23,7 @@ function setPreview(){state.preview=true;state.user={employee_id:'DEMO',name:'Pr
 function demoCalendar(){const d=myDate();const prefix=d.slice(0,7);return {[prefix+'-12']:[{employee_name:'Natasya',status:'APPROVED'}],[prefix+'-16']:[{employee_name:'Roland',status:'PENDING'},{employee_name:'Fikhry',status:'APPROVED'}],[prefix+'-20']:[{employee_name:'Iman',status:'APPROVED'}]}}
 async function login(e){e.preventDefault();const b=$('loginBtn');b.disabled=true;b.firstChild.textContent='Signing in… ';try{const r=await call('login',{employeeId:$('employeeId').value.trim(),pin:$('pin').value});state.token=r.token;sessionStorage.setItem('sb_session',r.token);state.user=r.user;await load();enter()}catch(err){toast(err.message,true)}finally{b.disabled=false;b.firstChild.textContent='Sign in '}}
 async function load(){if(state.preview)return;const r=await call('bootstrap');state.user=r.user;state.overview=r.data}
-function enter(){$('loginScreen').classList.add('hidden');$('appScreen').classList.remove('hidden');$('sidebarName').textContent=state.user.name;$('sidebarRole').textContent=state.user.position||state.user.role;$('avatar').textContent=state.user.name.slice(0,1).toUpperCase();$('adminNav').classList.toggle('hidden',state.user.role!=='ADMIN');$('balancesNav').classList.toggle('hidden',state.user.role!=='ADMIN');$('modeBadge').textContent=state.preview?'PREVIEW':'CONNECTED';$('previewNotice').classList.toggle('hidden',!state.preview);$('todayLabel').textContent=fmt(myDate());render()}
+function enter(){$('loginScreen').classList.add('hidden');$('appScreen').classList.remove('hidden');$('sidebarName').textContent=state.user.name;$('sidebarRole').textContent=state.user.position||state.user.role;$('avatar').textContent=state.user.name.slice(0,1).toUpperCase();$('adminNav').classList.toggle('hidden',state.user.role!=='ADMIN');$('balancesNav').classList.toggle('hidden',state.user.role!=='ADMIN');$('reportsNav').classList.toggle('hidden',state.user.role!=='ADMIN');$('modeBadge').textContent=state.preview?'PREVIEW':'CONNECTED';$('previewNotice').classList.toggle('hidden',!state.preview);$('todayLabel').textContent=fmt(myDate());render()}
 function showLogin(){$('appScreen').classList.add('hidden');$('loginScreen').classList.remove('hidden')}
 function navigate(page){state.view=page;document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===page));render()}
 function title(s){return '<div class="section-bar"><h2>'+s+'</h2></div>'}
@@ -301,6 +301,34 @@ function togglePH(creditId){
     catch(e){toast(e.message,true)}
   }}]);
 }
+
+function reports(){
+ if(state.user.role!=='ADMIN')return cardEmpty('Admin only');
+ const items=[
+  ['staff','Employee Directory','Staff details and employment status','users'],
+  ['leave','Leave Application Register','AL, PH, EL and Off Day corrections','calendar-days'],
+  ['ot','Overtime Register','OT hours, decisions and notes','clock'],
+  ['al','Annual Leave Allocation','Entitlement, carry-forward and adjustments','calendar-check'],
+  ['ph','Public Holiday Credit Ledger','Historical and future PH credits','calendar-range'],
+  ['audit','Admin Activity & Audit','Administration actions and change history','shield-check']
+ ];
+ return '<div class="hero"><div><span class="eyebrow">ADMIN REPORTING</span><h2>Reports & Audit</h2>'+
+  '<p>Download an Excel-compatible CSV for operational reconciliation and management review. All data is requested securely from the server.</p></div></div>'+
+  '<div class="grid grid-3">'+items.map(([id,label,desc])=>
+   '<div class="card"><h3>'+esc(label)+'</h3><p class="muted">'+esc(desc)+'</p>'+
+   '<button class="primary-btn" data-admin-report="'+id+'">Export CSV</button></div>').join('')+'</div>'+
+  '<div class="soft-note" style="margin-top:20px">Only Admin can generate these reports. Audit records are not editable. CSV exports can be opened in Excel. Restrict report downloads to authorized management and store them securely.</div>';
+}
+async function exportAdminReport(report){
+ if(state.preview||state.user?.role!=='ADMIN')return toast('Admin only',true);
+ try{
+  toast('Preparing '+report.toUpperCase()+' report…');
+  const result=await call('adminReport',{report});
+  if(!result.rows?.length)return toast('No records to export');
+  downloadTableCsv('SkyBar_'+report.toUpperCase()+'_'+myDate()+'.csv',result.columns,result.rows);
+  toast('Report downloaded: '+result.rows.length+' record(s)');
+ }catch(e){toast(e.message,true)}
+}
 function admin(){
   if(state.user.role!=='ADMIN')return cardEmpty('Admin access only.');
   const people=state.overview.employees||[];
@@ -560,7 +588,7 @@ function changeOwnPinModal(){
       toast('PIN changed. Please sign in again.');
     });
 }
-function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',balances:'AL & PH Management',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,balances,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));$('alYearSelector')?.addEventListener('change',e=>{state.alYear=Number(e.target.value);render()});
+function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',balances:'AL & PH Management',reports:'Reports & Audit',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,balances,reports,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));$('alYearSelector')?.addEventListener('change',e=>{state.alYear=Number(e.target.value);render()});
 $('phYearSelector')?.addEventListener('change',e=>{state.phYear=e.target.value;render()});
 $('phStaffSelector')?.addEventListener('change',e=>{state.phStaff=e.target.value;render()});
 $('bulkPHBtn')?.addEventListener('click',()=>openBulkPHDraft());
@@ -570,6 +598,7 @@ document.querySelectorAll('[data-edit-al]').forEach(x=>x.onclick=()=>editAL(x.da
 document.querySelectorAll('[data-edit-ph]').forEach(x=>x.onclick=()=>editPH(x.dataset.editPh));
 document.querySelectorAll('[data-toggle-ph]').forEach(x=>x.onclick=()=>togglePH(x.dataset.togglePh));
 document.querySelectorAll('[data-edit-leave-type]').forEach(x=>x.onclick=()=>editLeaveType(x.dataset.editLeaveType));
+document.querySelectorAll('[data-admin-report]').forEach(el=>el.onclick=()=>exportAdminReport(el.dataset.adminReport));
 $('exportOTBtn')?.addEventListener('click',exportOT);
 document.querySelectorAll('[data-ot-action]').forEach(el=>el.onclick=()=>otStatusAction(el.dataset.otAction,el.dataset.otDecision));
 document.querySelectorAll('[data-print-admin-ot]').forEach(el=>el.onclick=()=>printOT(el.dataset.printAdminOt,true));
