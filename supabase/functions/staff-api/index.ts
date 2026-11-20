@@ -90,7 +90,7 @@ async function bootstrap(staff:Staff){
   const [als,credits,requests,days,ots,approvers]=await Promise.all([
     request("al_balances?staff_id=eq."+staff.id+"&source_year=eq."+year+"&select=entitlement,carry_forward,adjustment"),
     request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,source_year"),
-    request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code&order=submitted_at.desc&limit=150"),
+    request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code,admin_note&order=submitted_at.desc&limit=150"),
     request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
     request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,ot_minutes,status&order=created_at.desc&limit=150"),
     request("staff?active=eq.true&role=eq.ADMIN&select=id,employee_id,name,position")
@@ -123,12 +123,13 @@ async function bootstrap(staff:Staff){
   });
   let admin:any={};
   if(staff.role==="ADMIN"){
-    const [employees,pending,alAllocations,phCredits,adminPhUsage]=await Promise.all([
+    const [employees,pending,alAllocations,phCredits,adminPhUsage,allLeaves]=await Promise.all([
       request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
       request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
       request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
-      request("ph_usage?select=credit_id,units,leave_requests!inner(status)")
+      request("ph_usage?select=credit_id,units,leave_requests!inner(status)"),
+      request("leave_requests?select=id,staff_id,request_code,leave_type,duration,start_date,end_date,units,status,reason,admin_note,submitted_at&order=submitted_at.desc&limit=400")
     ]);
     const names=new Map(employees.map((e:any)=>[e.id,e.name]));
     const usedByCredit=new Map<string,number>();
@@ -139,6 +140,7 @@ async function bootstrap(staff:Staff){
     admin={
       employees,
       pending:pending.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
+      adminLeaves:allLeaves.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
       alAllocations,
       phCredits:phCredits.map((p:any)=>({...p,reservedUnits:usedByCredit.get(p.id)||0}))
     };
@@ -176,6 +178,15 @@ serve(async req=>{
     }
     if(input.action==="cancelLeave"){
       return json(await rpc("change_leave_status_v2",{p_actor:staff.id,p_request:input.requestId,p_status:"CANCELLED"}),200,origin);
+    }
+    if(input.action==="adminChangeLeaveType"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("admin_change_leave_type_v2",{
+        p_actor:staff.id,
+        p_request:input.requestId,
+        p_type:String(input.leaveType||""),
+        p_note:String(input.note||"")
+      }),200,origin);
     }
     if(input.action==="decideLeave"){
       if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
