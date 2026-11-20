@@ -88,16 +88,18 @@ async function bootstrap(staff:Staff){
   const prefix=localDate().slice(0,7);
   const year=Number(prefix.slice(0,4));
   const [als,credits,requests,days,ots,approvers]=await Promise.all([
-    request("al_balances?staff_id=eq."+staff.id+"&source_year=lte."+year+"&select=entitlement,carry_forward,adjustment"),
+    request("al_balances?staff_id=eq."+staff.id+"&source_year=eq."+year+"&select=entitlement,carry_forward,adjustment"),
     request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,source_year"),
     request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code&order=submitted_at.desc&limit=150"),
     request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
     request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,ot_minutes,status&order=created_at.desc&limit=150"),
     request("staff?active=eq.true&role=eq.ADMIN&select=id,employee_id,name,position")
   ]);
-  const reserved= requests.filter((r:any)=>r.status==="APPROVED"||r.status==="PENDING");
+  // AL uses the selected calendar year's allocation only, including its explicit carry-forward.
   const alGranted=als.reduce((n:number,r:any)=>n+Number(r.entitlement)+Number(r.carry_forward)+Number(r.adjustment),0);
-  const alUsed=reserved.filter((r:any)=>r.leave_type==="AL").reduce((n:number,r:any)=>n+Number(r.units),0);
+  // Query ALL reserved AL requests (not just the last 150 shown in the UI).
+  const alReserved=await request("leave_requests?staff_id=eq."+staff.id+"&leave_type=eq.AL&status=in.(PENDING,APPROVED)&start_date=gte."+year+"-01-01&start_date=lt."+(year+1)+"-01-01&select=units");
+  const alUsed=alReserved.reduce((n:number,r:any)=>n+Number(r.units),0);
   // Include all active requests across the database for PH credit consumption, not just the last 150.
   const usage=credits.length ? await request("ph_usage?credit_id=in.("+credits.map((c:any)=>c.id).join(",")+")&select=credit_id,units,leave_requests!inner(status)") : [];
   const sums=new Map<string,number>();
@@ -121,12 +123,25 @@ async function bootstrap(staff:Staff){
   });
   let admin:any={};
   if(staff.role==="ADMIN"){
-    const [employees,pending]=await Promise.all([
+    const [employees,pending,alAllocations,phCredits,adminPhUsage]=await Promise.all([
       request("staff?select=id,employee_id,name,position,department,role,active,employment_status,last_working_date&order=name.asc"),
-      request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc")
+      request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
+      request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
+      request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes&order=source_year.desc,holiday_date.asc.nullslast"),
+      request("ph_usage?select=credit_id,units,leave_requests!inner(status)")
     ]);
     const names=new Map(employees.map((e:any)=>[e.id,e.name]));
-    admin={employees,pending:pending.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"}))};
+    const usedByCredit=new Map<string,number>();
+    for(const u of adminPhUsage){
+      if(["PENDING","APPROVED"].includes(u.leave_requests?.status))
+        usedByCredit.set(u.credit_id,(usedByCredit.get(u.credit_id)||0)+Number(u.units));
+    }
+    admin={
+      employees,
+      pending:pending.map((r:any)=>({...r,employee_name:names.get(r.staff_id)||"Staff"})),
+      alAllocations,
+      phCredits:phCredits.map((p:any)=>({...p,reservedUnits:usedByCredit.get(p.id)||0}))
+    };
   }
   return {user:staff,data:{
     balances:{al:Math.max(0,alGranted-alUsed),ph,locked},
@@ -174,6 +189,32 @@ serve(async req=>{
       }),200,origin);
     }
 
+
+    if(input.action==="adminSaveAL"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.allocation||{};
+      return json(await rpc("admin_save_al_v2",{
+        p_actor:staff.id,p_staff:p.staffId,p_year:p.year,
+        p_entitlement:p.entitlement,p_carry_forward:p.carryForward,
+        p_adjustment:p.adjustment,p_notes:String(p.notes||"")
+      }),200,origin);
+    }
+    if(input.action==="adminSavePH"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      const p=input.credit||{};
+      return json(await rpc("admin_save_ph_v2",{
+        p_actor:staff.id,p_credit:p.id||null,p_staff:p.staffId,p_year:p.year,
+        p_name:String(p.holidayName||""),p_holiday_date:p.holidayDate||null,
+        p_units:p.units,p_release_mode:String(p.releaseMode||"AUTO_DATE"),
+        p_notes:String(p.notes||"")
+      }),200,origin);
+    }
+    if(input.action==="adminTogglePH"){
+      if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
+      return json(await rpc("admin_toggle_ph_v2",{
+        p_actor:staff.id,p_credit:input.creditId,p_active:input.active
+      }),200,origin);
+    }
     if(input.action==="adminCreateStaff"){
       if(staff.role!=="ADMIN")throw new ApiError("Admin access required",403);
       const p=input.employee||{};
