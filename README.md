@@ -17,11 +17,14 @@ This repository contains the **V2 foundation**. It is not yet ready for staff pr
 | Calendar displays staff names and pending/approved | Implemented; needs UAT |
 | AL by-year balance, entitlement, approved carry-forward and adjustment | Migration 004 + admin UI committed; requires SQL/Edge deployment & UAT |
 | PH credit ledger, 2025/2026 historical credits, date-triggered 2027 PH | Migration 004 + admin UI committed; requires SQL/Edge deployment & UAT |
-| Leave approval and cancel | Implemented; needs UAT |
-| OT with 9-hour deduction, midnight crossings | Implemented; needs UAT |
-| OT approval and original HR Excel export | **Not migrated yet** |
+| Leave approval and cancel | Implemented; awaiting combined end-to-end UAT |
+| Admin correction of leave type AL / PH / EL / OFF | Migration 006 + Edge/API/UI committed; requires SQL 006 + latest Edge deployment |
+| OT with 9-hour deduction, midnight crossings | Implemented; awaiting combined end-to-end UAT |
+| OT approval / reject / pending cancel | Migration 007 + Edge/API/UI committed; requires SQL 007 + latest Edge deployment |
+| Printable OT claim (generic) | Implemented; exact original hotel HR template not yet accessible |
+| Management reports, native XLSX export, and audit | Code committed; requires latest Edge deployment and UAT |
 | Employee registration, position, ID change, resignation, PIN reset and safe delete | **Code committed; requires migration 003 + redeploy of Edge API + UAT** |
-| Automated database backup and audit reporting | **Not configured yet** |
+| Database backups and restore exercise | Supabase plan-dependent; configuration and recovery rehearsal pending |
 
 **Security notes:** The frontend contains no service role key, password or real staff records. All database access goes through an Edge Function. The browser only holds a short-lived opaque session token (sessionStorage). Database RLS is enabled, with no policies for public access. Admin and server security need a full penetration review before launch.
 
@@ -137,7 +140,7 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 - Apply for leave **only in current month**, not earlier dates.
 - **2 staff maximum per calendar date**, counting both PENDING and APPROVED.
 - Full day = 1 unit; half-day AM/PM = 0.5 unit.
-- AL credits counted across allocated years; used/reserved units reduce available balance.
+- AL credits are scoped to the entitlement year; approved carry-forward is entered explicitly into that year's row. Pending/Approved requests reduce remaining balance.
 - Historical PH can be entered with `MANUAL` release mode; dated PH unlocks on the actual date using Kuala Lumpur time.
 - PH credits consumed oldest-first in one database transaction.
 - OT = max(0, total shift duration − 9 hours); cross-midnight handled.
@@ -147,8 +150,9 @@ Commit the change. Reload the GitHub Pages URL, login using your temporary admin
 
 ## Upcoming milestones
 
-1. Complete AL/PH UAT; implement controlled bulk allocation if required.
-2. Full OT approvals and downloadable HR Excel claim matching `OT form.xlsx`.
-3. Data validation, user acceptance testing with three simulated staff.
-4. Backups, operational runbook and security review.
-5. Production cutover, target **1 Jan 2027**.
+1. Run migrations **006 and 007** in Supabase production after backing up database, then deploy **latest** `staff-api` once.
+2. Confirm the GitHub main frontend has been published to Cloudflare and no backend files are publicly served.
+3. Complete single combined UAT (including OFF Admin correction, OT and XLSX downloads) in isolated staging only.
+4. Obtain original hotel OT Excel form to match its exact HR layout; the operational print form is generic.
+5. Configure backups, rehearse restore, complete security review and management sign-off.
+6. Production cutover target **1 January 2027**.
