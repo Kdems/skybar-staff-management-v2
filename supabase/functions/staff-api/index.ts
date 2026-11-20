@@ -10,7 +10,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "https://kdems.github.io",
   "https://skybar-staff-management-v2.texas-boiler.workers.dev"
 ];
-const extraOrigin = (Deno.env.get("SKYBAR_ALLOWED_ORIGIN") || "").trim().replace(/\\/+$/, "");
+const extraOrigin = (Deno.env.get("SKYBAR_ALLOWED_ORIGIN") || "").trim().replace(new RegExp("/+$"), "");
 const ALLOWED = [...new Set([...DEFAULT_ALLOWED_ORIGINS, extraOrigin].filter(Boolean))];
 
 class ApiError extends Error {
