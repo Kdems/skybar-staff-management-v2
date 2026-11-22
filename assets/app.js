@@ -3,7 +3,7 @@
 const cfg=window.SKYBAR_CONFIG||{};
 const API=String(cfg.apiUrl||'').trim();
 const TZ='Asia/Kuala_Lumpur';
-const state={token:sessionStorage.getItem('sb_session')||'',user:null,overview:null,view:'overview',preview:false,alYear:2027,phYear:'ALL',phStaff:'ALL'};
+const state={token:sessionStorage.getItem('sb_session')||'',user:null,overview:null,view:'overview',preview:false,alYear:2027,phYear:'ALL',phStaff:'ALL',phHoliday:'ALL'};
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const myDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -207,7 +207,7 @@ function balances(){
   const total=Number(a?.entitlement||0)+Number(a?.carry_forward||0)+Number(a?.adjustment||0);
   return '<tr><td><b>'+esc(p.employee_id)+'</b></td><td>'+esc(p.name)+'</td><td>'+num(a?.entitlement)+'</td><td>'+num(a?.carry_forward)+'</td><td>'+num(a?.adjustment)+'</td><td><b>'+num(total)+'</b></td><td><button class="ghost-btn" data-edit-al="'+esc(p.id)+'">'+(a?'Edit':'Set AL')+'</button></td></tr>';
  }).join('');
- const phRows=credits.filter(p=>(state.phYear==='ALL'||String(p.source_year)===state.phYear)&&(state.phStaff==='ALL'||p.staff_id===state.phStaff));
+ const phRows=credits.filter(p=>(state.phYear==='ALL'||String(p.source_year)===state.phYear)&&(state.phStaff==='ALL'||p.staff_id===state.phStaff)&&(state.phHoliday==='ALL'||p.holiday_name===state.phHoliday));
  const names=new Map(people.map(p=>[p.id,p]));
  const phTable=phRows.map(p=>{
   const employee=names.get(p.staff_id);
@@ -215,6 +215,8 @@ function balances(){
  }).join('');
  const phYearOptions=['ALL','2025','2026','2027','2028','2029'].map(y=>'<option value="'+y+'" '+(state.phYear===y?'selected':'')+'>'+(y==='ALL'?'All years':y)+'</option>').join('');
  const phStaffOptions='<option value="ALL">All staff</option>'+people.map(p=>'<option value="'+esc(p.id)+'" '+(state.phStaff===p.id?'selected':'')+'>'+esc(p.name)+' ('+esc(p.employee_id)+')</option>').join('');
+ const holidays=[...new Set(credits.map(p=>p.holiday_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+ const phHolidayOptions='<option value="ALL">All holidays</option>'+holidays.map(name=>'<option value="'+esc(name)+'" '+(state.phHoliday===name?'selected':'')+'>'+esc(name)+'</option>').join('');
  return '<div class="hero"><div><span class="eyebrow">ADMIN CONTROL</span><h2>Annual Leave & Public Holiday</h2><p>Prepare 2027 entitlements, record historical 2025–2026 PH, and schedule future PH credits with automatic unlock dates.</p></div></div>'+
   '<div class="grid grid-3">'+metric('AL Allocated ('+year+')',count,people.length+' staff accounts')+metric('Released PH',num(Math.max(0,released)),'Available units, across staff')+metric('Locked Future PH',num(locked),'Awaiting holiday dates')+'</div>'+
   '<div class="section-bar"><div><h2>Annual Leave Allocation</h2><p>Each year is separate. Carry-forward into 2027 belongs in the 2027 row.</p></div><select id="alYearSelector" class="toolbar-select">'+yearOptions+'</select></div>'+
@@ -224,7 +226,8 @@ function balances(){
   '<button class="action-card" id="bulkPHBtn"><span class="action-icon">▦</span><span><b>Allocate Annual PH Schedule</b><small>Enter multiple holiday dates → apply to selected staff</small></span></button>'+
   '<button class="action-card" id="openingPHBtn"><span class="action-icon">☷</span><span><b>Historical PH Balances 2025 / 2026</b><small>One 13-staff table → save everything once</small></span></button></div>'+
   '<div class="section-bar"><div><h2>Public Holiday Credit Ledger</h2><p>2025 historical PH may be entered as earned. Future PH remains locked until its date.</p></div><button class="primary-btn" id="addPHBtn">+ Add PH Credit</button></div>'+
-  '<div class="filter-bar"><select id="phYearSelector" class="toolbar-select">'+phYearOptions+'</select><select id="phStaffSelector" class="toolbar-select">'+phStaffOptions+'</select></div>'+
+  '<div class="filter-bar"><select id="phYearSelector" class="toolbar-select" aria-label="Filter PH by year">'+phYearOptions+'</select><select id="phStaffSelector" class="toolbar-select" aria-label="Filter PH by staff">'+phStaffOptions+'</select><select id="phHolidaySelector" class="toolbar-select" aria-label="Filter PH by holiday name">'+phHolidayOptions+'</select></div>'+ 
+  '<div class="muted" style="margin:-2px 0 12px">Showing '+phRows.length+' of '+credits.length+' PH credit records</div>'+
   '<div class="card table-wrap">'+(phRows.length?'<table><thead><tr><th>Staff</th><th>Year</th><th>Holiday</th><th>Holiday Date</th><th>Credit</th><th>Reserved</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+phTable+'</tbody></table>':cardEmpty('No PH credits for these filters.'))+'</div>'+
   '<div class="soft-note" style="margin-top:16px">Admin can prepare credits now. Live leave submissions stay locked until 1 January 2027; PH is consumed oldest-first.</div>';
 }
@@ -721,6 +724,7 @@ function changeOwnPinModal(){
 function render(){const names={overview:'Overview',leave:'Leave Request',calendar:'Leave Calendar',overtime:'Overtime',history:'My Requests',balances:'AL & PH Management',reports:'Reports & Audit',admin:'Administration'};$('pageHeading').textContent=names[state.view]||'Overview';$('view').innerHTML=({overview,leave:requestForm,calendar,overtime,history,balances,reports,admin}[state.view]||overview)();document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>navigate(x.dataset.go)));$('leaveForm')?.addEventListener('submit',onLeave);$('otForm')?.addEventListener('submit',onOt);$('shiftStart')?.addEventListener('input',refreshOt);$('shiftEnd')?.addEventListener('input',refreshOt);document.querySelectorAll('[data-cancel]').forEach(x=>x.onclick=()=>modal('Cancel leave request?','This pending leave request will be cancelled and its daily slots released.',[{text:'Keep request'},{text:'Cancel request',primary:true,action:async()=>{try{await call('cancelLeave',{requestId:x.dataset.cancel});await reload();toast('Request cancelled')}catch(e){toast(e.message,true)}}}]));$('alYearSelector')?.addEventListener('change',e=>{state.alYear=Number(e.target.value);render()});
 $('phYearSelector')?.addEventListener('change',e=>{state.phYear=e.target.value;render()});
 $('phStaffSelector')?.addEventListener('change',e=>{state.phStaff=e.target.value;render()});
+$('phHolidaySelector')?.addEventListener('change',e=>{state.phHoliday=e.target.value;render()});
 $('bulkPHBtn')?.addEventListener('click',()=>openBulkPHDraft());
 $('openingPHBtn')?.addEventListener('click',()=>openHistoricalBulk());
 $('addPHBtn')?.addEventListener('click',()=>editPH());
