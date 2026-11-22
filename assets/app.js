@@ -55,6 +55,8 @@ function history(){
 const commonPH = ['Federal Territory Day','Chinese New Year','Nuzul Al-Quran','Hari Raya Aidilfitri','Labour Day','Wesak Day','Hari Raya Aidiladha','Agong Birthday','Awal Muharram','National Day','Malaysia Day','Maulidur Rasul','Deepavali','Christmas Day','Additional PH'];
 function phStatus(credit){
  if(!credit.active)return 'INACTIVE';
+ if(credit.expires_on && credit.expires_on<=myDate())
+  return Math.max(0,Number(credit.units)-Number(credit.reservedUnits||0))>0?'BURN':'USED';
  if(credit.release_mode==='AUTO_DATE' && credit.holiday_date>myDate())return 'LOCKED';
  return 'RELEASED';
 }
@@ -129,7 +131,7 @@ function openingBalanceYear(year){
  return people.map(p=>{
   const records=credits.filter(c=>c.staff_id===p.id&&Number(c.source_year)===year);
   const opening=records.find(c=>c.bulk_key==='OPENING:'+year || (c.holiday_name==='Opening PH Balance '+year&&c.release_mode==='MANUAL'));
-  const other=records.filter(c=>c.active&&c.id!==opening?.id).reduce((n,c)=>n+Math.max(0,Number(c.units)-Number(c.reservedUnits||0)),0);
+  const other=records.filter(c=>c.active&&c.id!==opening?.id&&(!c.expires_on||c.expires_on>myDate())).reduce((n,c)=>n+Math.max(0,Number(c.units)-Number(c.reservedUnits||0)),0);
   return {p,opening:opening?.active?Number(opening.units):0,other};
  });
 }
@@ -200,7 +202,7 @@ function balances(){
  const year=state.alYear, now=myDate();
  const count=allocations.filter(a=>Number(a.source_year)===year).length;
  const locked=credits.filter(p=>p.active&&p.release_mode==='AUTO_DATE'&&p.holiday_date>now).reduce((n,p)=>n+Number(p.units),0);
- const released=credits.filter(p=>p.active&&(p.release_mode==='MANUAL'||p.holiday_date<=now)).reduce((n,p)=>n+Number(p.units)-(Number(p.reservedUnits)||0),0);
+ const released=credits.filter(p=>p.active&&(!p.expires_on||p.expires_on>now)&&(p.release_mode==='MANUAL'||p.holiday_date<=now)).reduce((n,p)=>n+Number(p.units)-(Number(p.reservedUnits)||0),0);
  const yearOptions=[2025,2026,2027,2028,2029].map(y=>'<option value="'+y+'" '+(y===year?'selected':'')+'>'+y+'</option>').join('');
  const alRows=people.map(p=>{
   const a=allocations.find(v=>v.staff_id===p.id&&Number(v.source_year)===year);
