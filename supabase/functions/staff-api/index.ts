@@ -89,7 +89,7 @@ async function bootstrap(staff:Staff){
   const year=Number(prefix.slice(0,4));
   const [als,credits,requests,days,ots,approvers]=await Promise.all([
     request("al_balances?staff_id=eq."+staff.id+"&source_year=eq."+year+"&select=entitlement,carry_forward,adjustment"),
-    request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,source_year"),
+    request("ph_credits?staff_id=eq."+staff.id+"&active=eq.true&select=id,units,release_mode,holiday_date,expires_on,source_year"),
     request("leave_requests?staff_id=eq."+staff.id+"&select=id,leave_type,duration,start_date,end_date,units,status,reason,request_code,admin_note&order=submitted_at.desc&limit=150"),
     request("leave_days?leave_date=gte."+prefix+"-01&leave_date=lt."+nextMonth(prefix)+"-01&status=in.(PENDING,APPROVED)&select=leave_date,status,staff_id"),
     request("overtime_requests?staff_id=eq."+staff.id+"&select=id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,instructed_by,status,admin_note,decided_at,created_at&order=created_at.desc&limit=150"),
@@ -108,6 +108,7 @@ async function bootstrap(staff:Staff){
   let ph=0,locked=0;
   credits.forEach((c:any)=>{
     const remainder=Math.max(0,Number(c.units)-(sums.get(c.id)||0));
+    if(c.expires_on&&today>=c.expires_on)return; // Remaining dated PH has burned; previous reservations stay on record.
     if(c.release_mode==="MANUAL"||c.holiday_date<=today)ph+=remainder;else locked+=remainder;
   });
   const byDate:Record<string,unknown[]>={};
@@ -127,7 +128,7 @@ async function bootstrap(staff:Staff){
       request("staff?select=id,employee_id,name,position,department,role,active,ot_approver,employment_status,last_working_date&order=name.asc"),
       request("leave_requests?status=eq.PENDING&select=id,staff_id,leave_type,start_date,end_date,reason,units&order=submitted_at.asc"),
       request("al_balances?select=id,staff_id,source_year,entitlement,carry_forward,adjustment,notes&order=source_year.desc"),
-      request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
+      request("ph_credits?select=id,staff_id,source_year,holiday_name,holiday_date,expires_on,units,release_mode,active,notes,bulk_key&order=source_year.desc,holiday_date.asc.nullslast"),
       request("ph_usage?select=credit_id,units,leave_requests!inner(status)"),
       request("leave_requests?select=id,staff_id,request_code,leave_type,duration,start_date,end_date,units,status,reason,admin_note,submitted_at&order=submitted_at.desc&limit=400"),
       request("overtime_requests?select=id,staff_id,ot_date,shift_start,shift_end,total_shift_minutes,ot_minutes,claim_type,reason,instructed_by,status,admin_note,decided_at,created_at&order=created_at.desc&limit=500")
@@ -196,10 +197,24 @@ async function adminReportData(report:string){
    x.entitlement,x.carry_forward,x.adjustment,Number(x.entitlement)+Number(x.carry_forward)+Number(x.adjustment),x.notes||""])};
  }
  if(kind==="ph"){
-  const rr=await fetchRowsPaged("ph_credits","staff_id,source_year,holiday_name,holiday_date,units,release_mode,active,notes","source_year.desc");
-  return {columns:["Staff ID","Employee","Source Year","Holiday","Date","Credit Days","Unlock Mode","Active","Notes"],
-   rows:rr.map((x:any)=>[person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.source_year,
-    x.holiday_name,x.holiday_date||"",x.units,x.release_mode,x.active?"YES":"NO",x.notes||""])};
+  const [rr,usage]=await Promise.all([
+    fetchRowsPaged("ph_credits","id,staff_id,source_year,holiday_name,holiday_date,expires_on,units,release_mode,active,notes","source_year.desc"),
+    fetchRowsPaged("ph_usage","credit_id,units,leave_requests!inner(status)","credit_id.asc")
+  ]);
+  const reserved=new Map<string,number>();
+  for(const u of usage)if(["PENDING","APPROVED"].includes(u.leave_requests?.status))
+    reserved.set(u.credit_id,(reserved.get(u.credit_id)||0)+Number(u.units));
+  const today=localDate();
+  return {columns:["Staff ID","Employee","Source Year","Holiday","Date","Expires On","Credit Days","Reserved Days","Burned Days","Status","Unlock Mode","Active","Notes"],
+   rows:rr.map((x:any)=>{
+    const used=reserved.get(x.id)||0;
+    const unspent=Math.max(0,Number(x.units)-used);
+    const expired=Boolean(x.expires_on&&today>=x.expires_on);
+    const burned=x.active&&expired?unspent:0;
+    const creditStatus=!x.active?"INACTIVE":expired?(unspent>0?"BURN":"USED"):(x.release_mode==="AUTO_DATE"&&x.holiday_date>today?"LOCKED":"RELEASED");
+    return [person(x.staff_id).employee_id||"",person(x.staff_id).name||"",x.source_year,
+     x.holiday_name,x.holiday_date||"",x.expires_on||"",x.units,used,burned,creditStatus,x.release_mode,x.active?"YES":"NO",x.notes||""];
+   })};
  }
  const rr=await fetchRowsPaged("audit_log","actor_staff_id,action,record_id,created_at","created_at.desc");
  return {columns:["Logged At","Actor ID","Actor Name","Action","Record ID"],
